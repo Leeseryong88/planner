@@ -25,49 +25,9 @@ function sanitizeForFirestore<T>(input: T): any {
   return out;
 }
 
-// Initial placeholder data
-const initialProjects: Project[] = [
-  {
-    id: 'proj-1',
-    title: '웹사이트 리디자인',
-    content: '전체적인 브랜드 경험을 향상시키기 위해 웹사이트를 현대적인 디자인으로 개편합니다.',
-    status: ProjectStatus.InProgress,
-    position: { x: 300, y: 300 },
-    tasks: [],
-    date: '2024-08-01',
-    endDate: '2024-09-15',
-    isCollapsed: false,
-  },
-  {
-    id: 'proj-2',
-    title: '주간 소셜 미디어 포스팅',
-    content: '매주 소셜 미디어 채널에 게시할 콘텐츠를 기획하고 디자인합니다.',
-    status: ProjectStatus.InProgress,
-    position: { x: 800, y: 400 },
-    tasks: [],
-    date: '2024-07-28',
-    isCollapsed: false,
-  },
-  {
-    id: 'proj-3',
-    title: '2분기 마케팅 보고서',
-    content: '2분기 마케팅 캠페인 성과를 분석하고 보고서를 작성합니다.',
-    status: ProjectStatus.Completed,
-    position: { x: 400, y: 600 },
-    tasks: [],
-    isCollapsed: true,
-  },
-];
-
-const initialTasks: Task[] = [
-    { id: 'task-1-1', projectId: 'proj-1', title: '초기 목업', content: '피그마에서 와이어프레임 및 목업 디자인', date: '2024-08-10', position: { x: 550, y: 250 } },
-    { id: 'task-1-2', projectId: 'proj-1', title: '홈페이지 개발', content: '반응형 홈페이지 프론트엔드 구현', date: '2024-08-15', endDate: '2024-08-20', position: { x: 550, y: 350 } },
-    { id: 'task-2-1', projectId: 'proj-2', title: '1주차 콘텐츠 기획', content: '', position: { x: 1050, y: 350 }},
-    { id: 'task-2-2', projectId: 'proj-2', title: '1주차 그래픽 디자인', content: '', position: { x: 1050, y: 450 }},
-    { id: 'task-3-1', projectId: 'proj-3', title: '판매 데이터 수집', content: '', position: {x: 650, y: 550 }},
-    { id: 'task-3-2', projectId: 'proj-3', title: '캠페인 성과 분석', content: '', position: {x: 650, y: 650 }},
-    { id: 'task-orphan-1', projectId: null, title: '연결되지 않은 작업', content: '프로젝트나 다른 작업에 연결해주세요.', position: {x: 800, y: 150} }
-];
+// 초기 화면 깜빡임 방지를 위해 샘플 데이터 제거 (빈 상태로 시작)
+const initialProjects: Project[] = [];
+const initialTasks: Task[] = [];
 
 const initialMemos: Memo[] = [
   {
