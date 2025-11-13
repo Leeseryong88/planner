@@ -1,0 +1,621 @@
+import React, { useMemo, useState, useCallback } from 'react';
+import { ProjectStore } from '../hooks/useProjectStore';
+import { Project, Task, ProjectStatus } from '../types';
+import { CheckIcon, ChevronDownIcon, ChevronUpIcon, ChevronLeftIcon, ChevronRightIcon, AttachmentIcon } from './icons';
+
+type CardSize = 'sm' | 'md';
+
+const TaskItem: React.FC<{ 
+  task: Task; 
+  projectStatus?: ProjectStatus; 
+  priority?: number; 
+  size?: CardSize;
+  onPreview?: (task: Task, clientPos: { x: number; y: number }) => void;
+  onPreviewEnd?: () => void;
+}> = ({ task, projectStatus, priority, size = 'md', onPreview, onPreviewEnd }) => {
+  const isProjectCompleted = projectStatus === ProjectStatus.Completed;
+  const isCompleted = task.completed || isProjectCompleted;
+  const completionDate = task.completionDate ? new Date(task.completionDate).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit'}) : null;
+
+  let bgClass = 'bg-secondary';
+  let borderClass = 'border-border-color';
+  let titleClass = 'text-text-main';
+  let dateClass = 'text-text-secondary';
+
+  const sizeClasses = {
+    md: { card: 'w-56 h-24 p-3', title: 'text-sm', date: 'text-xs', badge: 'w-5 h-5 text-xs' },
+  } as const;
+
+  if (isCompleted) {
+    bgClass = 'bg-gray-100';
+    borderClass = 'border-gray-300';
+    titleClass = 'text-gray-500';
+    if (isProjectCompleted) {
+        titleClass += ' line-through';
+    }
+    dateClass = 'text-gray-500';
+  } else if (priority === 1) {
+    bgClass = 'bg-sky-200';
+    borderClass = 'border-sky-300';
+    titleClass = 'text-sky-700';
+    dateClass = 'text-sky-600';
+  }
+
+  // Small mode: completed = gray dot, not-completed = blue priority badge
+  if (size === 'sm') {
+    const isDone = isCompleted;
+    const titleStyle = isDone ? 'text-gray-500' : 'text-text-main';
+    const handleMove = (e: React.MouseEvent) => {
+      onPreview?.(task, { x: e.clientX, y: e.clientY });
+    };
+    return (
+      <div 
+        className="flex flex-col items-center justify-start w-20 select-none"
+        onMouseEnter={(e) => onPreview?.(task, { x: e.clientX, y: e.clientY })}
+        onMouseMove={handleMove}
+        onMouseLeave={() => onPreviewEnd?.()}
+      >
+        {isDone ? (
+          <div className="mt-1 rounded-full bg-gray-400 w-3.5 h-3.5" />
+        ) : (
+          <div className="mt-0.5 flex items-center justify-center rounded-full bg-sky-500 text-white w-5 h-5 text-[10px] font-bold">
+            {priority ?? '•'}
+          </div>
+        )}
+        <p className={`mt-2 text-[11px] leading-tight text-center line-clamp-2 ${titleStyle}`}>{task.title}</p>
+      </div>
+    );
+  }
+
+  // Default (md)
+  return (
+    <div className={`relative rounded-lg border flex flex-col justify-between shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${bgClass} ${borderClass} ${sizeClasses.md.card}`}>
+      {priority && !isCompleted && (
+        <span className={`absolute -top-2 -right-2 text-white font-bold rounded-full flex items-center justify-center shadow-md ${sizeClasses.md.badge} ${priority === 1 ? 'bg-accent' : 'bg-gray-400'}`}>
+          {priority === 1 ? '★' : priority}
+        </span>
+      )}
+      <div className="flex items-start justify-between gap-2">
+        <p className={`font-semibold ${sizeClasses.md.title} ${titleClass}`}>{task.title}</p>
+        {task.fileURL && (
+          <AttachmentIcon className="w-4 h-4 text-text-secondary flex-shrink-0" title="첨부파일 있음" />
+        )}
+      </div>
+      <p className="text-xs text-text-secondary line-clamp-2">{task.content}</p>
+      <div className="flex items-center justify-between">
+        <span className="invisible select-none">.</span>
+        {isCompleted && completionDate ? (
+          <span className={`text-xs text-green-600`}>✓ {completionDate} 완료</span>
+        ) : (
+          <span className={`${sizeClasses.md.date} ${dateClass}`}>{task.endDate || task.date || ''}</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+const ProjectItem: React.FC<{ project: Project; onClick: () => void; }> = ({ project, onClick }) => (
+  <div 
+    onClick={onClick}
+    className={`relative p-4 rounded-lg border-2 w-56 h-24 flex flex-col justify-between shadow-md transition-all hover:shadow-lg hover:scale-105 cursor-pointer ${project.status === ProjectStatus.Completed ? 'bg-gray-100 border-gray-300' : 'bg-secondary border-accent'}`}
+    title="캔버스에서 보기"
+  >
+    <h3 className={`font-bold text-base ${project.status === ProjectStatus.Completed ? 'text-text-secondary' : 'text-text-main'}`}>{project.title}</h3>
+    <span className="text-xs text-text-secondary">{project.date || ''}</span>
+    {project.status === ProjectStatus.Completed && (
+      <CheckIcon className="w-6 h-6 text-success absolute -top-3 -right-3 bg-secondary rounded-full p-1 border border-gray-300" />
+    )}
+  </div>
+);
+
+const Connector: React.FC = () => (
+    <div className="flex items-center justify-center w-12 mx-2">
+        <div className="w-full h-0.5 bg-border-color rounded-full"></div>
+    </div>
+);
+
+const TaskBranch: React.FC<{ task: Task; childTasksByParentId: Map<string, Task[]>; projectStatus?: ProjectStatus, prioritizedTaskIds: string[], size?: CardSize }> = ({ task, childTasksByParentId, projectStatus, prioritizedTaskIds, size = 'md' }) => {
+    const children = childTasksByParentId.get(task.id) || [];
+    const priority = prioritizedTaskIds.indexOf(task.id);
+    const isProjectCompleted = projectStatus === ProjectStatus.Completed;
+
+    const taskStyle = isProjectCompleted ? { textDecoration: 'none', color: '#6b7280' } : {};
+
+
+    return (
+        <div className="flex items-center">
+            <TaskItem task={task} projectStatus={projectStatus} priority={priority > -1 ? priority + 1 : undefined} size={size} />
+            {children.length > 0 && (
+                <>
+                    <Connector />
+                    <div className="flex flex-col gap-4 items-start">
+                        {children.map(child => (
+                            <TaskBranch key={child.id} task={child} childTasksByParentId={childTasksByParentId} projectStatus={projectStatus} prioritizedTaskIds={prioritizedTaskIds} size={size} />
+                        ))}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
+
+
+const ProjectRow: React.FC<{ project: Project; onProjectClick: (id: string) => void; childTasksByParentId: Map<string, Task[]>; store: ProjectStore; size: CardSize }> = ({ project, onProjectClick, childTasksByParentId, store, size }) => {
+    const scrollRef = React.useRef<HTMLDivElement>(null);
+    const [showLeft, setShowLeft] = React.useState(false);
+    const [showRight, setShowRight] = React.useState(false);
+    const isDraggingRef = React.useRef(false);
+    const startXRef = React.useRef(0);
+    const startScrollRef = React.useRef(0);
+    const [preview, setPreview] = React.useState<{ task: Task | null; pos: { x: number; y: number } }>({ task: null, pos: { x: 0, y: 0 } });
+    // Always derive tasks from the global store to avoid brief empty states during snapshots
+    const projectTasks = React.useMemo(() => store.tasks.filter(t => t.projectId === project.id), [store.tasks, project.id]);
+
+    const updateArrows = React.useCallback(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const { scrollLeft, scrollWidth, clientWidth } = el;
+        setShowLeft(scrollLeft > 4);
+        setShowRight(scrollLeft + clientWidth < scrollWidth - 4);
+    }, []);
+
+    React.useEffect(() => {
+        updateArrows();
+        const el = scrollRef.current;
+        if (!el) return;
+        const onScroll = () => updateArrows();
+        el.addEventListener('scroll', onScroll, { passive: true });
+        const ro = new ResizeObserver(() => updateArrows());
+        ro.observe(el);
+        return () => {
+            el.removeEventListener('scroll', onScroll);
+            ro.disconnect();
+        };
+    }, [updateArrows, project.tasks.length]);
+
+    const scrollByAmount = (dir: 'left' | 'right') => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const amount = Math.max(320, Math.floor(el.clientWidth * 0.8));
+        el.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' });
+    };
+
+    // Drag to scroll
+    React.useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const onDown = (e: MouseEvent) => {
+            isDraggingRef.current = true;
+            el.classList.add('cursor-grabbing');
+            startXRef.current = e.clientX;
+            startScrollRef.current = el.scrollLeft;
+        };
+        const onMove = (e: MouseEvent) => {
+            if (!isDraggingRef.current) return;
+            const dx = e.clientX - startXRef.current;
+            el.scrollLeft = startScrollRef.current - dx;
+        };
+        const onUp = () => {
+            isDraggingRef.current = false;
+            el.classList.remove('cursor-grabbing');
+        };
+        el.addEventListener('mousedown', onDown);
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        // touch
+        const onTouchStart = (e: TouchEvent) => {
+            isDraggingRef.current = true;
+            startXRef.current = e.touches[0].clientX;
+            startScrollRef.current = el.scrollLeft;
+        };
+        const onTouchMove = (e: TouchEvent) => {
+            if (!isDraggingRef.current) return;
+            const dx = e.touches[0].clientX - startXRef.current;
+            el.scrollLeft = startScrollRef.current - dx;
+        };
+        const onTouchEnd = () => { isDraggingRef.current = false; };
+        el.addEventListener('touchstart', onTouchStart, { passive: true });
+        el.addEventListener('touchmove', onTouchMove, { passive: true });
+        el.addEventListener('touchend', onTouchEnd);
+        return () => {
+            el.removeEventListener('mousedown', onDown);
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            el.removeEventListener('touchstart', onTouchStart);
+            el.removeEventListener('touchmove', onTouchMove);
+            el.removeEventListener('touchend', onTouchEnd);
+        };
+    }, []);
+
+    // Build breadth-first columns with parent-preserving groups to avoid row sharing across branches
+    const groupedColumns = React.useMemo(() => {
+        const seen = new Set<string>();
+        // roots: tasks directly linked to project
+        const roots = projectTasks.filter(t => !t.parentTaskId);
+        const col0: Task[][] = roots.map(r => {
+            if (!seen.has(r.id)) seen.add(r.id);
+            return [r];
+        });
+        const cols: Task[][][] = [];
+        if (col0.length > 0) cols.push(col0);
+        let prevGroups = col0;
+        while (prevGroups.length > 0) {
+            const nextGroups: Task[][] = [];
+            prevGroups.forEach(group => {
+                group.forEach(parent => {
+                    // include all descendants regardless of projectId (some child tasks may be unassigned to project)
+                    const kids = (childTasksByParentId.get(parent.id) || []).filter(k => !seen.has(k.id));
+                    if (kids.length > 0) {
+                        kids.forEach(k => seen.add(k.id));
+                        nextGroups.push(kids);
+                    }
+                });
+            });
+            if (nextGroups.length === 0) break;
+            cols.push(nextGroups);
+            prevGroups = nextGroups;
+        }
+        // Fallback: if no roots detected (or empty columns) but tasks exist,
+        // render a single column with all tasks to avoid empty UI.
+        if (cols.length === 0 && projectTasks.length > 0) {
+            const fallback = [...projectTasks].sort((a, b) => (a.title || '').localeCompare(b.title || '') || a.id.localeCompare(b.id));
+            return [[fallback]];
+        }
+        return cols;
+    }, [projectTasks, childTasksByParentId, project.id]);
+
+    return (
+        <div
+            className={`flex items-center p-4 bg-primary rounded-lg shadow-inner transition-opacity duration-300 ${project.status === ProjectStatus.Completed ? 'opacity-70 hover:opacity-100' : ''}`}
+        >
+            <div className="flex-shrink-0 relative">
+                <ProjectItem project={project} onClick={() => onProjectClick(project.id)} />
+                {project.status === ProjectStatus.Completed && (
+                    <button 
+                        onClick={() => store.toggleProjectCollapse(project.id)}
+                        className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-secondary hover:bg-gray-100 rounded-full p-1 border border-gray-300 shadow-md transition-transform hover:scale-110 z-10"
+                        title={project.isCollapsed ? '펼치기' : '접기'}
+                    >
+                        {project.isCollapsed ? <ChevronDownIcon className="w-4 h-4 text-text-secondary"/> : <ChevronUpIcon className="w-4 h-4 text-text-secondary" />}
+                    </button>
+                )}
+            </div>
+            
+            {projectTasks.length > 0 && groupedColumns.length > 0 && !(project.status === ProjectStatus.Completed && project.isCollapsed) && (
+                <>
+                    <div className="relative flex-1 min-w-0">
+                        {/* Horizontal slider container */}
+                        <div
+                            ref={scrollRef}
+                            className="w-full overflow-x-auto overflow-y-hidden cursor-grab select-none no-scrollbar"
+                            style={{ scrollBehavior: 'smooth' }}
+                        >
+                            <div className={`flex flex-row items-start whitespace-nowrap snap-x snap-mandatory ${size === 'sm' ? 'gap-0 pr-10' : 'gap-0 pr-12'}`}>
+                                {groupedColumns.map((colGroups, idx) => (
+                                    <React.Fragment key={idx}>
+                                        <div className="inline-flex snap-start">
+                                            <div className={`flex flex-col ${size === 'sm' ? 'gap-6' : 'gap-6'} items-start`}>
+                                                {colGroups.map((group, gidx) => (
+                                                    <div key={gidx} className={`flex flex-col ${size === 'sm' ? 'gap-3' : 'gap-4'} items-start`}>
+                                                        {group.map(task => {
+                                                            const prioIndex = store.prioritizedTaskIds.indexOf(task.id);
+                                                            const priority = prioIndex > -1 ? prioIndex + 1 : undefined;
+                                                            return (
+                                                                <TaskItem
+                                                                    key={task.id}
+                                                                    task={task}
+                                                                    projectStatus={project.status}
+                                                                    priority={priority}
+                                                                    size={size}
+                                                                    onPreview={(t, pos) => setPreview({ task: t, pos })}
+                                                                    onPreviewEnd={() => setPreview({ task: null, pos: { x: 0, y: 0 } })}
+                                                                />
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </React.Fragment>
+                                ))}
+                            </div>
+                        </div>
+                        {showLeft && (
+                            <button
+                                onClick={() => scrollByAmount('left')}
+                                className="absolute left-0 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full shadow p-1 border border-border-color"
+                                aria-label="왼쪽으로 스크롤"
+                            >
+                                <ChevronLeftIcon className="w-5 h-5" />
+                            </button>
+                        )}
+                        {showRight && (
+                            <button
+                                onClick={() => scrollByAmount('right')}
+                                className="absolute right-0 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full shadow p-1 border border-border-color"
+                                aria-label="오른쪽으로 스크롤"
+                            >
+                                <ChevronRightIcon className="w-5 h-5" />
+                            </button>
+                        )}
+                        {/* Small mode hover preview */}
+                        {size === 'sm' && preview.task && (
+                            <div
+                                className="fixed z-50 pointer-events-none"
+                                style={{ left: preview.pos.x + 14, top: preview.pos.y + 14 }}
+                            >
+                                <div className="w-64 p-3 rounded-lg border bg-white shadow-xl">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <p className="font-semibold text-sm text-text-main">{preview.task.title}</p>
+                                        {preview.task.fileURL && <AttachmentIcon className="w-4 h-4 text-text-secondary" />}
+                                    </div>
+                                    <p className="text-xs text-text-secondary mt-1 line-clamp-3">{preview.task.content}</p>
+                                    <div className="text-xs text-text-secondary mt-2 text-right">
+                                        {preview.task.endDate || preview.task.date || ''}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
+
+
+const TaskPriorityView: React.FC<{ store: ProjectStore }> = ({ store }) => {
+    const { projects, tasks, prioritizedTaskIds, setPrioritizedTasks } = store;
+
+    const tasksById = useMemo(() => tasks.reduce((acc, t) => {
+        acc[t.id] = t;
+        return acc;
+    }, {} as Record<string, Task>), [tasks]);
+
+    const projectsById = useMemo(() => projects.reduce((acc, p) => {
+        acc[p.id] = p;
+        return acc;
+    }, {} as Record<string, Project>), [projects]);
+
+    const findRootProjectForTask = useCallback((taskId: string): Project | null => {
+        const visited = new Set<string>();
+        let currentId: string | undefined = taskId;
+        while (currentId && !visited.has(currentId)) {
+            visited.add(currentId);
+            const task = tasksById[currentId];
+            if (!task) return null;
+            if (task.projectId) return projectsById[task.projectId] || null;
+            currentId = task.parentTaskId || undefined;
+        }
+        return null;
+    }, [tasksById, projectsById]);
+    
+    const tasksForPrioritization = useMemo(() => {
+        return tasks.filter(task => {
+            if (task.completed) {
+                return false;
+            }
+            const rootProject = findRootProjectForTask(task.id);
+            return rootProject?.status === ProjectStatus.InProgress;
+        });
+    }, [tasks, findRootProjectForTask]);
+
+    const sortedTasks = useMemo(() => {
+        const prioritized = prioritizedTaskIds
+            .map(id => tasksForPrioritization.find(t => t.id === id))
+            .filter((t): t is Task => !!t);
+
+        const unprioritized = tasksForPrioritization.filter(t => !prioritizedTaskIds.includes(t.id));
+
+        return [...prioritized, ...unprioritized];
+    }, [tasksForPrioritization, prioritizedTaskIds]);
+    
+    const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+
+    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, taskId: string) => {
+        setDraggedTaskId(taskId);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', taskId);
+    };
+
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetTaskId: string) => {
+        e.preventDefault();
+        if (!draggedTaskId || draggedTaskId === targetTaskId) return;
+
+        const currentTaskIds = sortedTasks.map(t => t.id);
+        const draggedIndex = currentTaskIds.indexOf(draggedTaskId);
+        const targetIndex = currentTaskIds.indexOf(targetTaskId);
+        
+        const newIds = [...currentTaskIds];
+        const [removed] = newIds.splice(draggedIndex, 1);
+        newIds.splice(targetIndex, 0, removed);
+        
+        setPrioritizedTasks(newIds);
+    };
+
+    const handleDragEnd = () => {
+        setDraggedTaskId(null);
+    };
+
+    if (tasksForPrioritization.length === 0) {
+        return (
+            <div className="text-center py-12 text-text-secondary">
+              <p>우선순위를 정할 작업이 없습니다.</p>
+              <p className="text-sm">진행 중인 프로젝트에 작업을 추가하세요.</p>
+            </div>
+        );
+    }
+    
+    return (
+        <div className="space-y-3 p-4">
+            <h3 className="text-lg font-bold text-text-main mb-4">작업 우선순위 설정</h3>
+            <p className="text-sm text-text-secondary mb-4">작업을 드래그하여 우선순위를 변경하세요. 가장 위에 있는 작업이 1순위입니다.</p>
+            {sortedTasks.map((task, index) => {
+                const project = findRootProjectForTask(task.id);
+                return (
+                    <div
+                        key={task.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, task.id)}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, task.id)}
+                        onDragEnd={handleDragEnd}
+                        className={`flex items-center p-3 rounded-lg border cursor-grab transition-all ${draggedTaskId === task.id ? 'opacity-50' : ''} bg-secondary border-border-color shadow-sm`}
+                    >
+                        <div className="flex items-center justify-center w-8 h-8 mr-4 bg-accent text-white rounded-full font-bold text-sm flex-shrink-0">
+                            {index + 1}
+                        </div>
+                        <div className="flex-grow">
+                            <p className="font-semibold text-text-main">{task.title}</p>
+                            <p className="text-sm text-text-secondary">
+                                {project ? `프로젝트: ${project.title}` : '개별 작업'}
+                            </p>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+const CompletedProjectGridItem: React.FC<{
+  project: Project;
+  onProjectClick: (id: string) => void;
+  store: ProjectStore;
+}> = ({ project, onProjectClick, store }) => (
+  <div className="relative">
+    <ProjectItem project={project} onClick={() => onProjectClick(project.id)} />
+    <button
+      onClick={() => store.toggleProjectCollapse(project.id)}
+      className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-secondary hover:bg-gray-100 rounded-full p-1 border border-gray-300 shadow-md transition-transform hover:scale-110 z-10"
+      title="펼치기"
+    >
+      <ChevronDownIcon className="w-4 h-4 text-text-secondary"/>
+    </button>
+  </div>
+);
+
+
+export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (projectId: string) => void; }> = ({ store, onProjectClick }) => {
+  const [viewMode, setViewMode] = useState<'projects' | 'tasks'>('projects');
+  const cardSize: CardSize = 'sm';
+  const [isCompletedSectionCollapsed, setIsCompletedSectionCollapsed] = useState(false);
+  const { projects, tasks } = store;
+
+  const inProgressProjects = useMemo(() => 
+    projects.filter(p => p.status === ProjectStatus.InProgress), 
+  [projects]);
+
+  const completedProjects = useMemo(() => 
+    projects.filter(p => p.status === ProjectStatus.Completed),
+  [projects]);
+
+  const expandedCompletedProjects = useMemo(() =>
+    completedProjects.filter(p => !p.isCollapsed),
+  [completedProjects]);
+  
+  const collapsedCompletedProjects = useMemo(() =>
+    completedProjects.filter(p => p.isCollapsed),
+  [completedProjects]);
+
+  const childTasksByParentId = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    tasks.forEach(task => {
+      if (task.parentTaskId) {
+        if (!map.has(task.parentTaskId)) {
+          map.set(task.parentTaskId, []);
+        }
+        map.get(task.parentTaskId)!.push(task);
+      }
+    });
+    return map;
+  }, [tasks]);
+
+  const renderContent = () => {
+    switch (viewMode) {
+      case 'tasks':
+        return <TaskPriorityView store={store} />;
+      case 'projects':
+      default:
+        return (
+          <div className="space-y-8">
+            <div>
+              {inProgressProjects.map(project => (
+                <ProjectRow key={project.id} project={project} onProjectClick={onProjectClick} childTasksByParentId={childTasksByParentId} store={store} size={cardSize} />
+              ))}
+            </div>
+
+            {inProgressProjects.length > 0 && completedProjects.length > 0 && (
+              <div className="relative my-12">
+                <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                  <div className="w-full border-t border-border-color border-dashed"></div>
+                </div>
+                <div className="relative flex justify-center">
+                  <button
+                    onClick={() => setIsCompletedSectionCollapsed(!isCompletedSectionCollapsed)}
+                    className="flex items-center gap-2 bg-secondary/50 px-4 py-1 rounded-full text-sm font-semibold text-text-secondary hover:bg-primary transition-colors focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-secondary/50"
+                    aria-expanded={!isCompletedSectionCollapsed}
+                  >
+                    <span>완료된 프로젝트</span>
+                    {isCompletedSectionCollapsed ? <ChevronDownIcon className="w-4 h-4"/> : <ChevronUpIcon className="w-4 h-4"/>}
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {!isCompletedSectionCollapsed && completedProjects.length > 0 && (
+                <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-2 gap-y-2 place-items-start">
+                    {collapsedCompletedProjects.map(project => (
+                      <CompletedProjectGridItem 
+                        key={project.id} 
+                        project={project} 
+                        onProjectClick={onProjectClick} 
+                        store={store} 
+                      />
+                    ))}
+                  </div>
+                  
+                  {expandedCompletedProjects.length > 0 && (
+                    <div className="space-y-8 mt-12 pt-8 border-t border-border-color border-dashed">
+                        {expandedCompletedProjects.map(project => (
+                            <ProjectRow key={project.id} project={project} onProjectClick={onProjectClick} childTasksByParentId={childTasksByParentId} store={store} size={cardSize} />
+                        ))}
+                    </div>
+                  )}
+                </div>
+            )}
+
+            {projects.length === 0 && (
+              <div className="text-center py-12 text-text-secondary">
+                <p>표시할 프로젝트가 없습니다.</p>
+                <p className="text-sm">먼저 캔버스에서 프로젝트를 추가하세요.</p>
+              </div>
+            )}
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className="bg-secondary/50 rounded-lg p-4 border border-border-color">
+      <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center gap-2 p-1 bg-primary rounded-lg shadow-sm">
+                <button onClick={() => setViewMode('projects')} className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'projects' ? 'bg-accent text-white shadow' : 'text-text-secondary hover:bg-gray-200'}`}>
+                    프로젝트별 보기
+                </button>
+                <button onClick={() => setViewMode('tasks')} className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'tasks' ? 'bg-accent text-white shadow' : 'text-text-secondary hover:bg-gray-200'}`}>
+                    업무 우선순위
+                </button>
+            </div>
+        </div>
+      {renderContent()}
+    </div>
+  );
+};
