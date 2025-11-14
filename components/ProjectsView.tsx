@@ -102,19 +102,35 @@ const TaskItem: React.FC<{
 };
 
 
-const ProjectItem: React.FC<{ project: Project; onClick: () => void; }> = ({ project, onClick }) => (
-  <div 
-    onClick={onClick}
-    className={`relative p-4 rounded-lg border-2 w-56 h-24 flex flex-col justify-between shadow-md transition-all hover:shadow-lg hover:scale-105 cursor-pointer ${project.status === ProjectStatus.Completed ? 'bg-gray-100 border-gray-300' : 'bg-secondary border-accent'}`}
-    title="캔버스에서 보기"
-  >
-    <h3 className={`font-bold text-base ${project.status === ProjectStatus.Completed ? 'text-text-secondary' : 'text-text-main'}`}>{project.title}</h3>
-    <span className="text-xs text-text-secondary">{project.date || ''}</span>
-    {project.status === ProjectStatus.Completed && (
-      <CheckIcon className="w-6 h-6 text-success absolute -top-3 -right-3 bg-secondary rounded-full p-1 border border-gray-300" />
-    )}
-  </div>
-);
+const ProjectItem: React.FC<{ project: Project; onClick: () => void; }> = ({ project, onClick }) => {
+  const parseDate = (s?: string): Date | null => {
+    if (!s) return null;
+    const parts = s.split('-').map(Number);
+    if (parts.length !== 3) return null;
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  };
+  const start = project.date;
+  const end = project.endDate;
+  const display = start && end ? `${start} ~ ${end}` : (start || end || '');
+  const endDate = parseDate(end || undefined);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const twoWeeksMs = 14 * 24 * 60 * 60 * 1000;
+  const isEndingSoon = !!endDate && (endDate.getTime() - today.getTime()) <= twoWeeksMs;
+  const dateClass = isEndingSoon ? 'text-red-600 font-semibold' : 'text-text-secondary';
+  return (
+    <div 
+      onClick={onClick}
+      className={`relative p-4 rounded-lg border-2 w-56 h-24 flex flex-col justify-between shadow-md transition-all hover:shadow-lg hover:scale-105 cursor-pointer ${project.status === ProjectStatus.Completed ? 'bg-gray-100 border-gray-300' : 'bg-secondary border-accent'}`}
+      title="캔버스에서 보기"
+    >
+      <h3 className={`font-bold text-base ${project.status === ProjectStatus.Completed ? 'text-text-secondary' : 'text-text-main'}`}>{project.title}</h3>
+      <span className={`text-xs ${dateClass}`}>{display}</span>
+      {project.status === ProjectStatus.Completed && (
+        <CheckIcon className="w-6 h-6 text-success absolute -top-3 -right-3 bg-secondary rounded-full p-1 border border-gray-300" />
+      )}
+    </div>
+  );
+};
 
 const Connector: React.FC = () => (
     <div className="flex items-center justify-center w-12 mx-2">

@@ -98,6 +98,8 @@ export const DatePicker: React.FC<DatePickerProps> = ({ startDate, endDate, onDa
           const eDate = endDate ? parseDateString(endDate) : null;
           
           const isCurrentMonth = day.getMonth() === month;
+          const now = new Date();
+          const isToday = day.getFullYear() === now.getFullYear() && day.getMonth() === now.getMonth() && day.getDate() === now.getDate();
           const isStartDate = sDate && day.getTime() === sDate.getTime();
           const isEndDate = eDate && day.getTime() === eDate.getTime();
           const isInRange = sDate && eDate && day > sDate && day < eDate;
@@ -120,6 +122,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({ startDate, endDate, onDa
             ${(isInRange || isInHoverRange) && !isStartDate && !isEndDate ? 'bg-accent/20' : ''}
             ${!isStartDate && !isEndDate && !isInRange && !isInHoverRange && !isHoveredEdge ? 'hover:bg-gray-100' : ''}
             ${isStartDate || isEndDate || isHoveredEdge ? 'bg-accent text-white' : ''}
+            ${isToday && !isStartDate && !isEndDate ? 'text-red-600 font-bold' : ''}
           `;
 
           return (
