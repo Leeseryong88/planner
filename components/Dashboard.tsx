@@ -716,12 +716,35 @@ export const Dashboard: React.FC<{
                   if (!taskToEdit) return null;
                   return (
                       <Modal isOpen={true} onClose={() => setEditingNode(null)} title="작업 수정" position={editingNode.pos}>
-                          <TaskForm
-                              onSave={(formData) => store.updateTask(taskToEdit.id, formData)}
-                              onDelete={() => store.deleteTask(taskToEdit.id)}
-                              taskToEdit={taskToEdit}
-                              onClose={() => setEditingNode(null)}
-                          />
+                          {(() => {
+                            const ids = store.prioritizedTaskIds;
+                            const idx = ids.indexOf(taskToEdit.id);
+                            const movePriority = (from: number, to: number) => {
+                              const arr = Array.from(ids);
+                              const [m] = arr.splice(from, 1);
+                              arr.splice(to, 0, m);
+                              store.setPrioritizedTasks(arr);
+                            };
+                            return (
+                              <TaskForm
+                                onSave={(formData) => store.updateTask(taskToEdit.id, formData)}
+                                onDelete={() => store.deleteTask(taskToEdit.id)}
+                                taskToEdit={taskToEdit}
+                                onClose={() => setEditingNode(null)}
+                                priorityIndex={idx > -1 ? idx + 1 : null}
+                                onPriorityAddToEnd={() => {
+                                  if (idx === -1) store.setPrioritizedTasks([...ids, taskToEdit.id]);
+                                }}
+                                onPriorityRemove={() => {
+                                  if (idx > -1) store.setPrioritizedTasks(ids.filter(id => id !== taskToEdit.id));
+                                }}
+                                onPriorityUp={() => { if (idx > 0) movePriority(idx, idx - 1); }}
+                                onPriorityDown={() => { if (idx > -1 && idx < ids.length - 1) movePriority(idx, idx + 1); }}
+                                onPriorityTop={() => { if (idx > 0) movePriority(idx, 0); }}
+                                onPriorityBottom={() => { if (idx > -1 && idx < ids.length - 1) movePriority(idx, ids.length - 1); }}
+                              />
+                            );
+                          })()}
                       </Modal>
                   );
               }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Task } from '../types';
 import { DatePicker } from './DatePicker';
-import { CalendarIcon } from './icons';
+import { CalendarIcon, ChevronUpIcon, ChevronDownIcon } from './icons';
 
 // Fix: Redefine TaskFormData to only include fields the form is responsible for.
 // The original type required `position` and `projectId`, which this form doesn't
@@ -14,9 +14,17 @@ interface TaskFormProps {
   onSave: (taskData: Partial<Task>) => void;
   onDelete?: () => void;
   taskToEdit?: Task | null;
+  // Priority controls (only used when editing)
+  priorityIndex?: number | null;
+  onPriorityAddToEnd?: () => void;
+  onPriorityRemove?: () => void;
+  onPriorityUp?: () => void;
+  onPriorityDown?: () => void;
+  onPriorityTop?: () => void;
+  onPriorityBottom?: () => void;
 }
 
-export const TaskForm: React.FC<TaskFormProps> = ({ onClose, onSave, onDelete, taskToEdit }) => {
+export const TaskForm: React.FC<TaskFormProps> = ({ onClose, onSave, onDelete, taskToEdit, priorityIndex, onPriorityAddToEnd, onPriorityRemove, onPriorityUp, onPriorityDown, onPriorityTop, onPriorityBottom }) => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [date, setDate] = useState('');
@@ -126,6 +134,59 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onClose, onSave, onDelete, t
             className="w-full text-sm text-text-secondary file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-accent file:text-white hover:file:bg-accent-hover file:cursor-pointer transition-all"
           />
         </div>
+      {/* Priority controls when editing */}
+      {taskToEdit && (
+        <div className="mt-2 p-3 bg-primary rounded-lg border border-border-color">
+          <div className="flex items-center justify-between">
+            <p className="text-sm">
+              {priorityIndex && priorityIndex > 0 ? (
+                <span className="text-text-main">현재 우선순위: <span className="font-bold">{priorityIndex}</span></span>
+              ) : (
+                <span className="text-text-secondary">우선순위 미설정</span>
+              )}
+            </p>
+            <div className="flex items-center gap-3">
+              {priorityIndex && priorityIndex > 0 ? (
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-col">
+                    <button
+                      type="button"
+                      title="위로"
+                      onClick={onPriorityUp}
+                      className="p-1.5 rounded-md border border-border-color hover:bg-gray-100 flex items-center justify-center"
+                    >
+                      <ChevronUpIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="아래로"
+                      onClick={onPriorityDown}
+                      className="mt-1 p-1.5 rounded-md border border-border-color hover:bg-gray-100 flex items-center justify-center"
+                    >
+                      <ChevronDownIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onPriorityRemove}
+                    className="px-2 py-1 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50"
+                  >
+                    제거
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onPriorityAddToEnd}
+                  className="px-3 py-1 text-xs rounded-md bg-accent text-white hover:bg-accent-hover"
+                >
+                  우선순위 추가
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex justify-between items-center pt-4">
         <div>
           {taskToEdit && onDelete && (
