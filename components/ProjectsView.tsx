@@ -13,6 +13,10 @@ const TaskItem: React.FC<{
   onPreview?: (task: Task, clientPos: { x: number; y: number }) => void;
   onPreviewEnd?: () => void;
 }> = ({ task, projectStatus, priority, size = 'md', onPreview, onPreviewEnd }) => {
+  const truncateTitle = (s?: string) => {
+    const t = s || '';
+    return t.length > 4 ? `${t.slice(0, 4)}...` : t;
+  };
   const isProjectCompleted = projectStatus === ProjectStatus.Completed;
   const isCompleted = task.completed || isProjectCompleted;
   const completionDate = task.completionDate ? new Date(task.completionDate).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit'}) : null;
@@ -55,14 +59,17 @@ const TaskItem: React.FC<{
         onMouseMove={handleMove}
         onMouseLeave={() => onPreviewEnd?.()}
       >
-        {isDone ? (
-          <div className="mt-1 rounded-full bg-gray-400 w-3.5 h-3.5" />
-        ) : (
-          <div className="mt-0.5 flex items-center justify-center rounded-full bg-sky-500 text-white w-5 h-5 text-[10px] font-bold">
-            {priority ?? '•'}
-          </div>
-        )}
-        <p className={`mt-2 text-[11px] leading-tight text-center line-clamp-2 ${titleStyle}`}>{task.title}</p>
+        {/* Fixed icon row height to keep line height consistent */}
+        <div className="h-6 flex items-center justify-center">
+          {isDone ? (
+            <div className="rounded-full bg-gray-400 w-4 h-4" />
+          ) : (
+            <div className="flex items-center justify-center rounded-full bg-sky-500 text-white w-5 h-5 text-[10px] font-bold leading-none">
+              {priority ?? '•'}
+            </div>
+          )}
+        </div>
+        <p className={`mt-1 text-[11px] leading-tight text-center line-clamp-1 ${titleStyle}`}>{truncateTitle(task.title)}</p>
       </div>
     );
   }
@@ -76,7 +83,7 @@ const TaskItem: React.FC<{
         </span>
       )}
       <div className="flex items-start justify-between gap-2">
-        <p className={`font-semibold ${sizeClasses.md.title} ${titleClass}`}>{task.title}</p>
+        <p className={`font-semibold ${sizeClasses.md.title} ${titleClass}`}>{truncateTitle(task.title)}</p>
         {task.fileURL && (
           <AttachmentIcon className="w-4 h-4 text-text-secondary flex-shrink-0" title="첨부파일 있음" />
         )}
@@ -228,42 +235,92 @@ const ProjectRow: React.FC<{ project: Project; onProjectClick: (id: string) => v
         };
     }, []);
 
-    // Build breadth-first columns with parent-preserving groups to avoid row sharing across branches
-    const groupedColumns = React.useMemo(() => {
-        const seen = new Set<string>();
-        // roots: tasks directly linked to project
+    // Row/Depth layout so deeper 노드들도 정확한 행에 정렬
+    const layout = React.useMemo(() => {
+        // Build global children mapping already provided; collect subtree starting at this project's roots
         const roots = projectTasks.filter(t => !t.parentTaskId);
-        const col0: Task[][] = roots.map(r => {
-            if (!seen.has(r.id)) seen.add(r.id);
-            return [r];
+        const inSet = new Set<string>();
+        const collect = (t: Task) => {
+            if (inSet.has(t.id)) return;
+            inSet.add(t.id);
+            const kids = childTasksByParentId.get(t.id) || [];
+            kids.forEach(collect);
+        };
+        roots.forEach(collect);
+        if (roots.length === 0) return { depthKeys: [] as number[], columns: new Map<number, Task[]>(), rowOf: new Map<string, number>() };
+        // subtree rows cache
+        const getRows = (id: string, cache = new Map<string, number>()): number => {
+            if (cache.has(id)) return cache.get(id)!;
+            const kids = (childTasksByParentId.get(id) || []).filter(k => inSet.has(k.id));
+            if (kids.length === 0) { cache.set(id, 1); return 1; }
+            let sum = 0;
+            for (const k of kids) sum += getRows(k.id, cache);
+            sum = Math.max(sum, 1);
+            cache.set(id, sum);
+            return sum;
+        };
+        const rowOf = new Map<string, number>();
+        const depthOf = new Map<string, number>();
+        let currentRow = 0;
+        const assign = (t: Task, depth: number, startRow: number) => {
+            const rows = getRows(t.id);
+            const myRow = startRow + Math.floor((rows - 1) / 2);
+            rowOf.set(t.id, myRow);
+            depthOf.set(t.id, depth);
+            const kids = (childTasksByParentId.get(t.id) || []).filter(k => inSet.has(k.id));
+            let s = startRow;
+            for (const k of kids) {
+                const need = getRows(k.id);
+                assign(k, depth + 1, s);
+                s += need;
+            }
+        };
+        // stable order for roots
+        roots.sort((a, b) => (a.title || '').localeCompare(b.title || '') || a.id.localeCompare(b.id));
+        for (const r of roots) {
+            const need = getRows(r.id);
+            assign(r, 1, currentRow);
+            currentRow += need + 1;
+        }
+        const columns = new Map<number, Task[]>();
+        const tasksById = new Map(store.tasks.map(t => [t.id, t]));
+        inSet.forEach(id => {
+            const t = tasksById.get(id);
+            if (!t) return;
+            const d = depthOf.get(id);
+            if (d === undefined) return;
+            const arr = columns.get(d) || [];
+            arr.push(t);
+            columns.set(d, arr);
         });
-        const cols: Task[][][] = [];
-        if (col0.length > 0) cols.push(col0);
-        let prevGroups = col0;
-        while (prevGroups.length > 0) {
-            const nextGroups: Task[][] = [];
-            prevGroups.forEach(group => {
-                group.forEach(parent => {
-                    // include all descendants regardless of projectId (some child tasks may be unassigned to project)
-                    const kids = (childTasksByParentId.get(parent.id) || []).filter(k => !seen.has(k.id));
-                    if (kids.length > 0) {
-                        kids.forEach(k => seen.add(k.id));
-                        nextGroups.push(kids);
-                    }
-                });
-            });
-            if (nextGroups.length === 0) break;
-            cols.push(nextGroups);
-            prevGroups = nextGroups;
-        }
-        // Fallback: if no roots detected (or empty columns) but tasks exist,
-        // render a single column with all tasks to avoid empty UI.
-        if (cols.length === 0 && projectTasks.length > 0) {
-            const fallback = [...projectTasks].sort((a, b) => (a.title || '').localeCompare(b.title || '') || a.id.localeCompare(b.id));
-            return [[fallback]];
-        }
-        return cols;
-    }, [projectTasks, childTasksByParentId, project.id]);
+        const depthKeys = Array.from(columns.keys()).sort((a,b)=>a-b);
+        depthKeys.forEach(d => columns.get(d)!.sort((a,b)=> (rowOf.get(a.id)! - rowOf.get(b.id)!)));
+        return { depthKeys, columns, rowOf };
+    }, [projectTasks, childTasksByParentId, store.tasks]);
+
+    // Filtered 우선순위 인덱스 (실제 유효한 작업만 계산)
+    const prioritizedDisplayOrder = React.useMemo(() => {
+        const tasksById = new Map(store.tasks.map(t => [t.id, t]));
+        const projectsById = new Map(store.projects.map(p => [p.id, p]));
+        const findRoot = (taskId: string): Project | null => {
+            const seen = new Set<string>();
+            let cur: string | undefined = taskId;
+            while (cur && !seen.has(cur)) {
+                seen.add(cur);
+                const t = tasksById.get(cur);
+                if (!t) return null;
+                if (t.projectId) return projectsById.get(t.projectId) || null;
+                cur = t.parentTaskId || undefined;
+            }
+            return null;
+        };
+        return store.prioritizedTaskIds.filter(id => {
+            const t = tasksById.get(id);
+            if (!t || t.completed) return false;
+            const root = findRoot(id);
+            return root?.status === ProjectStatus.InProgress;
+        });
+    }, [store.prioritizedTaskIds, store.tasks, store.projects]);
 
     return (
         <div
@@ -282,7 +339,7 @@ const ProjectRow: React.FC<{ project: Project; onProjectClick: (id: string) => v
                 )}
             </div>
             
-            {projectTasks.length > 0 && groupedColumns.length > 0 && !(project.status === ProjectStatus.Completed && project.isCollapsed) && (
+            {projectTasks.length > 0 && layout.depthKeys.length > 0 && !(project.status === ProjectStatus.Completed && project.isCollapsed) && (
                 <>
                     <div className="relative flex-1 min-w-0">
                         {/* Horizontal slider container */}
@@ -292,18 +349,24 @@ const ProjectRow: React.FC<{ project: Project; onProjectClick: (id: string) => v
                             style={{ scrollBehavior: 'smooth' }}
                         >
                             <div className={`flex flex-row items-start whitespace-nowrap snap-x snap-mandatory ${size === 'sm' ? 'gap-0 pr-10' : 'gap-0 pr-12'}`}>
-                                {groupedColumns.map((colGroups, idx) => (
+                                {layout.depthKeys.map((depth, idx) => (
                                     <React.Fragment key={idx}>
                                         <div className="inline-flex snap-start">
-                                            <div className={`flex flex-col ${size === 'sm' ? 'gap-6' : 'gap-6'} items-start`}>
-                                                {colGroups.map((group, gidx) => (
-                                                    <div key={gidx} className={`flex flex-col ${size === 'sm' ? 'gap-3' : 'gap-4'} items-start`}>
-                                                        {group.map(task => {
-                                                            const prioIndex = store.prioritizedTaskIds.indexOf(task.id);
-                                                            const priority = prioIndex > -1 ? prioIndex + 1 : undefined;
-                                                            return (
+                                            <div className={`flex flex-col items-start`} style={{ position: 'relative' }}>
+                                                {(() => {
+                                                    const items = layout.columns.get(depth)!;
+                                                    const rowUnit = size === 'sm' ? 48 : 104;
+                                                    let lastRow = -1;
+                                                    return items.map(task => {
+                                                        const r = layout.rowOf.get(task.id)!;
+                                                        const spacerRows = r - lastRow - 1;
+                                                        lastRow = r;
+                                                        const prioIndex = prioritizedDisplayOrder.indexOf(task.id);
+                                                        const priority = prioIndex > -1 ? prioIndex + 1 : undefined;
+                                                        return (
+                                                            <React.Fragment key={task.id}>
+                                                                {spacerRows > 0 && <div style={{ height: spacerRows * rowUnit }} />}
                                                                 <TaskItem
-                                                                    key={task.id}
                                                                     task={task}
                                                                     projectStatus={project.status}
                                                                     priority={priority}
@@ -311,10 +374,10 @@ const ProjectRow: React.FC<{ project: Project; onProjectClick: (id: string) => v
                                                                     onPreview={(t, pos) => setPreview({ task: t, pos })}
                                                                     onPreviewEnd={() => setPreview({ task: null, pos: { x: 0, y: 0 } })}
                                                                 />
-                                                            );
-                                                        })}
-                                                    </div>
-                                                ))}
+                                                            </React.Fragment>
+                                                        );
+                                                    });
+                                                })()}
                                             </div>
                                         </div>
                                     </React.Fragment>

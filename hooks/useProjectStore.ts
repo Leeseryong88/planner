@@ -447,6 +447,17 @@ export const useProjectStore = () => {
         p.id === newTask.projectId ? {...p, tasks: [...p.tasks, newTask]} : p
       ))
     }
+    // Append to prioritized list if eligible (project in progress) and not duplicated
+    try {
+      const proj = newTask.projectId ? projects.find(p => p.id === newTask.projectId) : undefined;
+      if (!newTask.completed && proj?.status === ProjectStatus.InProgress && !prioritizedTaskIds.includes(newTask.id)) {
+        const next = [...prioritizedTaskIds, newTask.id];
+        setPrioritizedTaskIds(next);
+        if (uid) {
+          setDoc(doc(db, 'users', uid, 'state', 'app'), { prioritizedTaskIds: next }, { merge: true }).catch(() => {});
+        }
+      }
+    } catch {}
     if (uid) {
       const { file, ...toSave } = newTask as any;
       // 1) 처음 문서 저장 (fileURL 없이)
