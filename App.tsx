@@ -59,7 +59,9 @@ const App: React.FC = () => {
         <div className="container mx-auto flex justify-between items-center">
           <div className="flex items-center space-x-2">
             <LogoIcon className="w-7 h-7 text-accent"/>
-            <h1 className="text-xl md:text-2xl font-bold text-text-main tracking-wider">제니스 플래너</h1>
+            <button onClick={() => setCurrentView('dashboard')} className="text-left">
+              <h1 className="text-xl md:text-2xl font-bold text-text-main tracking-wider">work-task 플래너</h1>
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <nav className="flex items-center space-x-2 md:space-x-4 bg-primary/50 p-1 rounded-xl">
