@@ -56,36 +56,21 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ store }) => {
   const calendarEvents = useMemo(() => {
     const events: CalendarEvent[] = [];
 
-    // Add projects
+    // Projects only: use deadline (endDate if available, otherwise date)
     store.projects.forEach(p => {
-        if (p.date) {
-            events.push({
-                id: p.id,
-                title: p.title,
-                date: p.date,
-                endDate: p.endDate,
-                type: 'project',
-            });
-        }
-    });
-
-    // Add tasks
-    store.tasks.forEach(t => {
-        if (t.date) {
-            const project = store.projects.find(p => p.id === t.projectId);
-            events.push({
-                id: t.id,
-                title: t.title,
-                date: t.date,
-                endDate: t.endDate,
-                type: 'task',
-                projectTitle: project?.title || "개별 작업",
-            });
-        }
+      const deadline = p.endDate || p.date;
+      if (deadline) {
+        events.push({
+          id: p.id,
+          title: p.title,
+          date: deadline, // treat as single-day deadline
+          type: 'project',
+        });
+      }
     });
 
     return events;
-  }, [store.projects, store.tasks]);
+  }, [store.projects]);
 
 
   const changeMonth = (offset: number) => {
@@ -122,8 +107,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ store }) => {
 
   const eventElements = useMemo(() => {
     const elements: React.ReactElement[] = [];
-    const MAX_PROJECT_LANES = 2; // 프로젝트 최대 표시 줄
-    const MAX_TASK_LANES = 3;    // 작업 최대 표시 줄
+    const MAX_PROJECT_LANES = 4; // 프로젝트 최대 표시 줄 (deadline 점을 위에서부터 쌓음)
     const CELL_HEADER_OFFSET_REM = 2.25; // 일자 숫자 영역 높이(이 값만큼 위쪽 여백 확보)
     const LANE_HEIGHT_REM = 1.2;
     const WEEK_ROW_REM = 9; // 각 주의 세로 높이 (h-36 = 9rem)
@@ -134,18 +118,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ store }) => {
 
         const eventsInWeek = calendarEvents.filter(e => {
             const eventStart = parseDate(e.date);
-            const eventEnd = e.endDate ? parseDate(e.endDate) : eventStart;
+            const eventEnd = eventStart; // deadlines only
             return eventStart <= weekEnd && eventEnd >= weekStart;
         }).sort((a,b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
 
         const projectsInWeek = eventsInWeek.filter(e => e.type === 'project');
-        const tasksInWeek = eventsInWeek.filter(e => e.type === 'task');
 
         const placeEvents = (list: CalendarEvent[], maxLanes: number, baseOffsetLanes: number) => {
           const lanes: Date[] = [];
           list.forEach(event => {
             const eventStart = parseDate(event.date);
-            const eventEnd = event.endDate ? parseDate(event.endDate) : eventStart;
+            const eventEnd = eventStart;
             
             let laneIndex = lanes.findIndex(laneEndDate => eventStart > laneEndDate);
             if (laneIndex === -1) laneIndex = lanes.length;
@@ -155,12 +138,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ store }) => {
             const effectiveEnd = eventEnd > weekEnd ? weekEnd : eventEnd;
 
             const startDayIndex = effectiveStart.getDay();
-            const duration = (effectiveEnd.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24) + 1;
-
-            const isProject = event.type === 'project';
-            const barClass = isProject
-              ? 'bg-gradient-to-r from-indigo-500 to-blue-500 cursor-default'
-              : 'bg-gradient-to-r from-green-500 to-emerald-500 cursor-pointer';
+            // deadline은 항상 1일
+            // 작은 원 마커로 표시
+            const dotColorClass = 'bg-accent';
 
             if (laneIndex >= maxLanes) {
               const moreKey = `${weekIndex}-${effectiveStart.toISOString().split('T')[0]}`;
@@ -172,19 +152,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ store }) => {
               return;
             }
 
+            const topRem = `calc(${weekIndex * WEEK_ROW_REM}rem + ${CELL_HEADER_OFFSET_REM}rem + ${(baseOffsetLanes + laneIndex)} * ${LANE_HEIGHT_REM}rem)`;
+            const leftCalc = `calc(${(100 / 7) * startDayIndex}% + 10px)`;
             elements.push(
               <div
                 key={`${event.id}-${weekIndex}`}
-                onClick={!isProject ? () => handleTaskClick(event.id) : undefined}
-                className={`absolute ${barClass} text-white text-xs font-bold px-2 py-1 rounded-md overflow-hidden whitespace-nowrap pointer-events-auto shadow-lg hover:scale-[1.02] hover:z-10 transition-transform`}
-                style={{
-                  top: `calc(${weekIndex * WEEK_ROW_REM}rem + ${CELL_HEADER_OFFSET_REM}rem + ${(baseOffsetLanes + laneIndex)} * ${LANE_HEIGHT_REM}rem)`,
-                  left: `calc(${(100 / 7) * startDayIndex}% + 2px)`,
-                  width: `calc(${(100/7) * duration}% - 4px)`,
-                }}
-                title={isProject ? event.title : `${event.projectTitle}: ${event.title}`}
+                className="absolute flex items-center gap-1 pointer-events-none"
+                style={{ top: topRem, left: leftCalc }}
+                title={event.title}
               >
-                {event.title}
+                <span className={`inline-block w-2.5 h-2.5 rounded-full ${dotColorClass}`} />
+                <span className="text-[11px] text-text-main font-semibold truncate max-w-[90px]">{event.title}</span>
               </div>
             );
           });
@@ -192,7 +170,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ store }) => {
         };
 
         const usedProjectLanes = placeEvents(projectsInWeek, MAX_PROJECT_LANES, 0);
-        placeEvents(tasksInWeek, MAX_TASK_LANES, Math.min(usedProjectLanes, MAX_PROJECT_LANES));
 
         // 더보기 배지 렌더링
         for (let d = 0; d < 7; d++) {
@@ -206,7 +183,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ store }) => {
                 onClick={() => setMoreDate(dateStr)}
                 className="absolute bg-gray-200 text-gray-700 text-[11px] font-semibold px-2 py-0.5 rounded-full pointer-events-auto hover:bg-gray-300"
                 style={{
-                  top: `calc(${weekIndex * WEEK_ROW_REM}rem + ${CELL_HEADER_OFFSET_REM + (Math.min(usedProjectLanes, MAX_PROJECT_LANES) + MAX_TASK_LANES) * LANE_HEIGHT_REM + 0.25}rem)`,
+                  top: `calc(${weekIndex * WEEK_ROW_REM}rem + ${CELL_HEADER_OFFSET_REM + Math.min(usedProjectLanes, MAX_PROJECT_LANES) * LANE_HEIGHT_REM + 0.25}rem)`,
                   left: `calc(${(100 / 7) * d}% + 6px)`,
                 }}
                 title={`${moreInfo.count}개 더 보기`}
