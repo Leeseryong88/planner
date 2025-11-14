@@ -192,7 +192,7 @@ export const Dashboard: React.FC<{
       const t = tasksById[id];
       if (!t || t.completed) return false;
       const root = findRootProject(id);
-      return root?.status === ProjectStatus.InProgress;
+      return !root || root?.status === ProjectStatus.InProgress;
     });
   }, [store.prioritizedTaskIds, tasksById, findRootProject]);
 

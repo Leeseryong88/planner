@@ -447,10 +447,9 @@ export const useProjectStore = () => {
         p.id === newTask.projectId ? {...p, tasks: [...p.tasks, newTask]} : p
       ))
     }
-    // Append to prioritized list if eligible (project in progress) and not duplicated
+    // Append to prioritized list unconditionally for new tasks (bottom of list)
     try {
-      const proj = newTask.projectId ? projects.find(p => p.id === newTask.projectId) : undefined;
-      if (!newTask.completed && proj?.status === ProjectStatus.InProgress && !prioritizedTaskIds.includes(newTask.id)) {
+      if (!prioritizedTaskIds.includes(newTask.id)) {
         const next = [...prioritizedTaskIds, newTask.id];
         setPrioritizedTaskIds(next);
         if (uid) {

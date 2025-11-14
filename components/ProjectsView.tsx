@@ -318,7 +318,7 @@ const ProjectRow: React.FC<{ project: Project; onProjectClick: (id: string) => v
             const t = tasksById.get(id);
             if (!t || t.completed) return false;
             const root = findRoot(id);
-            return root?.status === ProjectStatus.InProgress;
+            return !root || root?.status === ProjectStatus.InProgress;
         });
     }, [store.prioritizedTaskIds, store.tasks, store.projects]);
 
@@ -460,7 +460,8 @@ const TaskPriorityView: React.FC<{ store: ProjectStore }> = ({ store }) => {
                 return false;
             }
             const rootProject = findRootProjectForTask(task.id);
-            return rootProject?.status === ProjectStatus.InProgress;
+            // include unlinked tasks as well
+            return !rootProject || rootProject?.status === ProjectStatus.InProgress;
         });
     }, [tasks, findRootProjectForTask]);
 
