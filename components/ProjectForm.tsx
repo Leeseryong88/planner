@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Project } from '../types';
 import { ProjectStore } from '../hooks/useProjectStore';
 import { Modal } from './Modal';
+import { storage, auth } from '../firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { DatePicker } from './DatePicker';
 import { CalendarIcon } from './icons';
 
@@ -21,6 +23,7 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({ onClose, store, projec
   const [isConfirmFinishOpen, setConfirmFinishOpen] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isUploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     if (projectToEdit) {
@@ -70,6 +73,39 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({ onClose, store, projec
     }
   };
 
+  // Paste image into content
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!e.clipboardData) return;
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const blob = item.getAsFile();
+        if (!blob) return;
+        try {
+          setUploadingImage(true);
+          const user = auth.currentUser;
+          if (!user) {
+            setUploadingImage(false);
+            return;
+          }
+          const uid = user.uid;
+          const fileName = `paste-${Date.now()}.png`;
+          const path = `users/${uid}/pasted/${fileName}`;
+          const sRef = storageRef(storage, path);
+          await uploadBytes(sRef, blob, { contentType: blob.type || 'image/png' });
+          const url = await getDownloadURL(sRef);
+          setContent(prev => `${prev ? prev + '\n' : ''}![image](${url})`);
+        } catch {
+        } finally {
+          setUploadingImage(false);
+        }
+        break;
+      }
+    }
+  };
+
   const handleFinishProject = () => {
     if (projectToEdit) {
       store.finishProject(projectToEdit.id);
@@ -97,10 +133,12 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({ onClose, store, projec
             id="content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
+            onPaste={handlePaste}
             placeholder="프로젝트에 대한 설명을 입력하세요..."
             className="w-full bg-primary p-3 rounded-md border border-border-color focus:ring-2 focus:ring-accent-glow focus:border-accent transition-all"
             rows={3}
           />
+          {isUploadingImage && <p className="text-xs text-text-secondary mt-1">이미지 업로드 중...</p>}
         </div>
         <div>
           <label htmlFor="date-range-picker" className="block text-sm font-medium text-text-secondary mb-1">

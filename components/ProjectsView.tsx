@@ -5,6 +5,32 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon, ChevronLeftIcon, ChevronRigh
 
 type CardSize = 'sm' | 'md';
 
+// Simple renderer that supports pasted image markdown or direct/Storage image URLs
+const TaskContentPreview: React.FC<{ text?: string }> = ({ text }) => {
+  if (!text) return null;
+  const t = text.trim();
+  if (!t) return null;
+  const lines = t.split('\n');
+  return (
+    <div className="text-[11px] text-text-secondary line-clamp-2 overflow-hidden">
+      {lines.map((line, idx) => {
+        const md = line.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/);
+        let src = md ? md[1] : null;
+        if (!src) {
+          const anyUrl = line.match(/https?:\/\/[^\s)]+/);
+          if (anyUrl && (/\.(png|jpg|jpeg|gif|webp)(\?|#|$)/i.test(anyUrl[0]) || anyUrl[0].includes('firebasestorage.googleapis.com'))) {
+            src = anyUrl[0];
+          }
+        }
+        if (src) {
+          return <img key={idx} src={src} alt="image" className="max-w-full max-h-28 rounded border border-border-color" />;
+        }
+        return <p key={idx} className="whitespace-pre-wrap">{line}</p>;
+      })}
+    </div>
+  );
+};
+
 const TaskItem: React.FC<{ 
   task: Task; 
   projectStatus?: ProjectStatus; 
@@ -88,7 +114,7 @@ const TaskItem: React.FC<{
           <AttachmentIcon className="w-4 h-4 text-text-secondary flex-shrink-0" title="첨부파일 있음" />
         )}
       </div>
-      <p className="text-xs text-text-secondary line-clamp-2">{task.content}</p>
+      <TaskContentPreview text={task.content} />
       <div className="flex items-center justify-between">
         <span className="invisible select-none">.</span>
         {isCompleted && completionDate ? (

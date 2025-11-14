@@ -60,10 +60,35 @@ export const TaskView: React.FC<TaskViewProps> = ({ task, onEdit, onDelete, onCo
         return null;
     })();
 
+    const renderRichContent = (text: string) => {
+        const isProbablyImageUrl = (u: string) => {
+          return /\.(png|jpg|jpeg|gif|webp)(\?|#|$)/i.test(u) || u.includes('firebasestorage.googleapis.com');
+        };
+        const pickImageInLine = (line: string): string | null => {
+          const mdMatch = line.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/);
+          if (mdMatch) return mdMatch[1];
+          const anyUrl = line.match(/https?:\/\/[^\s)]+/);
+          if (anyUrl && isProbablyImageUrl(anyUrl[0])) return anyUrl[0];
+          return null;
+        };
+        const lines = (text || '').split('\n');
+        return (
+          <div className="space-y-2">
+            {lines.map((line, idx) => {
+              const src = pickImageInLine(line);
+              if (src) {
+                return <img key={idx} src={src} alt="image" className="max-w-full rounded-md border border-border-color" />;
+              }
+              return <p key={idx} className="text-text-secondary whitespace-pre-wrap">{line}</p>;
+            })}
+          </div>
+        );
+    };
+
     return (
         <>
             <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-2 custom-scroll">
-                <p className="text-text-secondary whitespace-pre-wrap">{task.content}</p>
+                {renderRichContent(task.content)}
                 
                 {task.completed && completionDate && (
                     <div className="flex items-center space-x-2 text-sm text-green-700 p-3 bg-green-50 rounded-lg">

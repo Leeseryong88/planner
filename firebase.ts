@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAnalytics, isSupported, type Analytics } from 'firebase/analytics';
-import { getAuth } from 'firebase/auth';
+import { getAuth, signInAnonymously, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
@@ -22,6 +22,15 @@ export const storage = getStorage(firebaseApp);
 export let analytics: Analytics | null = null;
 
 if (typeof window !== 'undefined') {
+  // Ensure we always have an authenticated session (anonymous) for storage/firestore rules
+  setPersistence(auth, browserLocalPersistence)
+    .then(() => {
+      if (!auth.currentUser) {
+        return signInAnonymously(auth).catch(() => {});
+      }
+    })
+    .catch(() => {});
+
   isSupported()
     .then((supported) => {
       if (supported) {

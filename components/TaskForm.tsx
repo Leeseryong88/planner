@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Task } from '../types';
 import { DatePicker } from './DatePicker';
 import { CalendarIcon, ChevronUpIcon, ChevronDownIcon } from './icons';
+import { storage, auth } from '../firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // Fix: Redefine TaskFormData to only include fields the form is responsible for.
 // The original type required `position` and `projectId`, which this form doesn't
@@ -31,6 +33,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onClose, onSave, onDelete, t
   const [endDate, setEndDate] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [isUploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     if (taskToEdit) {
@@ -68,6 +71,42 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onClose, onSave, onDelete, t
     }
   };
 
+  // Handle paste image into content
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!e.clipboardData) return;
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const blob = item.getAsFile();
+        if (!blob) return;
+        try {
+          setUploadingImage(true);
+          const user = auth.currentUser;
+          if (!user) {
+            setUploadingImage(false);
+            // 인증 필요 안내
+            return;
+          }
+          const uid = user.uid;
+          const fileName = `paste-${Date.now()}.png`;
+          const path = `users/${uid}/pasted/${fileName}`;
+          const sRef = storageRef(storage, path);
+          await uploadBytes(sRef, blob, { contentType: blob.type || 'image/png' });
+          const url = await getDownloadURL(sRef);
+          // Insert markdown image syntax
+          setContent(prev => `${prev ? prev + '\n' : ''}![image](${url})`);
+        } catch {
+          // ignore
+        } finally {
+          setUploadingImage(false);
+        }
+        break;
+      }
+    }
+  };
+
   const handleDelete = () => {
     if(onDelete) {
       onDelete();
@@ -93,10 +132,12 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onClose, onSave, onDelete, t
           id="content"
           value={content}
           onChange={(e) => setContent(e.target.value)}
+          onPaste={handlePaste}
           placeholder="작업 내용을 입력하세요..."
           className="w-full bg-primary p-3 rounded-md border border-border-color focus:ring-2 focus:ring-accent-glow focus:border-accent transition-all"
           rows={3}
         />
+        {isUploadingImage && <p className="text-xs text-text-secondary mt-1">이미지 업로드 중...</p>}
       </div>
       <div>
           <label htmlFor="date-range-picker" className="block text-sm font-medium text-text-secondary mb-1">기간 (선택 사항)</label>
