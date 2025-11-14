@@ -8,7 +8,7 @@ import { useProjectStore } from './hooks/useProjectStore';
 import { signOut } from 'firebase/auth';
 import { auth } from './firebase';
 
-type View = 'dashboard' | 'calendar' | 'projects' | 'memos';
+type View = 'dashboard' | 'calendar' | 'projects' | 'priority' | 'memos';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -25,6 +25,9 @@ const App: React.FC = () => {
       case 'calendar':
         return <CalendarView store={projectStore} />;
       case 'projects':
+        return <ProjectsView store={projectStore} onProjectClick={handleNavigateToProject} />;
+      case 'priority':
+        // 같은 화면이지만 상단 탭만 다른 이름으로 접근
         return <ProjectsView store={projectStore} onProjectClick={handleNavigateToProject} />;
       case 'memos':
         return <NoteView store={projectStore} />;
@@ -62,6 +65,7 @@ const App: React.FC = () => {
             <nav className="flex items-center space-x-2 md:space-x-4 bg-primary/50 p-1 rounded-xl">
               <NavItem view="dashboard" label="캔버스" icon={<DashboardIcon />} />
               <NavItem view="projects" label="목록" icon={<ProjectsIcon />} />
+              <NavItem view="priority" label="업무 우선순위" icon={<ProjectsIcon />} />
               <NavItem view="memos" label="NOTE" icon={<EditIcon />} />
               <NavItem view="calendar" label="캘린더" icon={<CalendarIcon />} />
             </nav>
