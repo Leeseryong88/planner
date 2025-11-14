@@ -62,7 +62,7 @@ export const TaskView: React.FC<TaskViewProps> = ({ task, onEdit, onDelete, onCo
 
     return (
         <>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-2 custom-scroll">
                 <p className="text-text-secondary whitespace-pre-wrap">{task.content}</p>
                 
                 {task.completed && completionDate && (

@@ -300,6 +300,7 @@ const ProjectRow: React.FC<{ project: Project; onProjectClick: (id: string) => v
 
     // Filtered 우선순위 인덱스 (실제 유효한 작업만 계산)
     const prioritizedDisplayOrder = React.useMemo(() => {
+        const uniqueIds = Array.from(new Set(store.prioritizedTaskIds));
         const tasksById = new Map(store.tasks.map(t => [t.id, t]));
         const projectsById = new Map(store.projects.map(p => [p.id, p]));
         const findRoot = (taskId: string): Project | null => {
@@ -314,7 +315,7 @@ const ProjectRow: React.FC<{ project: Project; onProjectClick: (id: string) => v
             }
             return null;
         };
-        return store.prioritizedTaskIds.filter(id => {
+        return uniqueIds.filter(id => {
             const t = tasksById.get(id);
             if (!t || t.completed) return false;
             const root = findRoot(id);
@@ -466,11 +467,12 @@ const TaskPriorityView: React.FC<{ store: ProjectStore }> = ({ store }) => {
     }, [tasks, findRootProjectForTask]);
 
     const sortedTasks = useMemo(() => {
-        const prioritized = prioritizedTaskIds
+        const uniqueIds = Array.from(new Set(prioritizedTaskIds));
+        const prioritized = uniqueIds
             .map(id => tasksForPrioritization.find(t => t.id === id))
             .filter((t): t is Task => !!t);
 
-        const unprioritized = tasksForPrioritization.filter(t => !prioritizedTaskIds.includes(t.id));
+        const unprioritized = tasksForPrioritization.filter(t => !uniqueIds.includes(t.id));
 
         return [...prioritized, ...unprioritized];
     }, [tasksForPrioritization, prioritizedTaskIds]);
@@ -572,9 +574,13 @@ export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (proj
   const [isCompletedSectionCollapsed, setIsCompletedSectionCollapsed] = useState(false);
   const { projects, tasks } = store;
 
-  const inProgressProjects = useMemo(() => 
-    projects.filter(p => p.status === ProjectStatus.InProgress), 
-  [projects]);
+  const inProgressProjects = useMemo(() => {
+    const parse = (d?: string) => (d ? new Date(d).getTime() : Number.POSITIVE_INFINITY);
+    return projects
+      .filter(p => p.status === ProjectStatus.InProgress)
+      .slice()
+      .sort((a, b) => parse(a.endDate) - parse(b.endDate));
+  }, [projects]);
 
   const completedProjects = useMemo(() => 
     projects.filter(p => p.status === ProjectStatus.Completed),

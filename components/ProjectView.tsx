@@ -59,7 +59,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ project, onEdit, onFin
 
     return (
         <>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scroll">
                 <p className="text-text-secondary whitespace-pre-wrap">{project.content}</p>
                 {onAutoLayout && (
                   <div className="flex justify-end">

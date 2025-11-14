@@ -20,6 +20,7 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({ onClose, store, projec
   const [file, setFile] = useState<File | null>(null);
   const [isConfirmFinishOpen, setConfirmFinishOpen] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (projectToEdit) {
@@ -32,7 +33,17 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({ onClose, store, projec
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim()) {
+      setError('프로젝트 제목을 입력해 주세요.');
+      return;
+    }
+    // 신규 생성 시 기간 필수
+    if (!projectToEdit) {
+      if (!date || !endDate) {
+        setError('기간은 필수입니다. 시작일과 종료일을 선택해 주세요.');
+        return;
+      }
+    }
 
     const projectData = {
       title,
@@ -92,7 +103,9 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({ onClose, store, projec
           />
         </div>
         <div>
-          <label htmlFor="date-range-picker" className="block text-sm font-medium text-text-secondary mb-1">기간 (선택 사항)</label>
+          <label htmlFor="date-range-picker" className="block text-sm font-medium text-text-secondary mb-1">
+            기간 {projectToEdit ? <span className="text-text-secondary">(선택 사항)</span> : <span className="text-red-600 font-semibold">(필수)</span>}
+          </label>
           <div className="relative">
             <button
               type="button"
@@ -118,6 +131,7 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({ onClose, store, projec
             )}
           </div>
         </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex-1">
             <label htmlFor="file" className="block text-sm font-medium text-text-secondary mb-1">첨부 파일 (선택 사항)</label>
             <input

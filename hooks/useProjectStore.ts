@@ -138,7 +138,10 @@ export const useProjectStore = () => {
         // state (prioritizedTaskIds)
         const stateUnsub = onSnapshot(doc(db, 'users', user.uid, 'state', 'app'), (snap) => {
           const data: any = snap.data();
-          setPrioritizedTaskIds(Array.isArray(data?.prioritizedTaskIds) ? data.prioritizedTaskIds : []);
+          const raw = Array.isArray(data?.prioritizedTaskIds) ? data.prioritizedTaskIds : [];
+          // Deduplicate on read just in case persisted state has duplicates
+          const unique = Array.from(new Set(raw));
+          setPrioritizedTaskIds(unique);
         });
         // cleanup on logout or unmount
         return () => {
@@ -350,6 +353,36 @@ export const useProjectStore = () => {
     if (uid) {
       updateDoc(doc(db, 'users', uid, 'projects', projectId), sanitizeForFirestore({ status: ProjectStatus.InProgress, isCollapsed: false })).catch(() => {});
     }
+    // After reactivation, append this project's tasks back to prioritized list (at bottom)
+    try {
+      // Collect all descendant task ids for this project
+      const directTaskIds = tasks.filter(t => t.projectId === projectId).map(t => t.id);
+      const getAllDescendantTaskIds = (startTaskIds: string[], allTasks: Task[]): Set<string> => {
+        const allDescendants = new Set<string>();
+        const queue = [...startTaskIds];
+        const visited = new Set<string>();
+        while (queue.length > 0) {
+          const currentTaskId = queue.shift()!;
+          if (visited.has(currentTaskId)) continue;
+          visited.add(currentTaskId);
+          allDescendants.add(currentTaskId);
+          const children = allTasks.filter(t => t.parentTaskId === currentTaskId);
+          for (const child of children) {
+            if (!visited.has(child.id)) queue.push(child.id);
+          }
+        }
+        return allDescendants;
+      };
+      const allTaskIds = Array.from(getAllDescendantTaskIds(directTaskIds, tasks));
+      // Keep only not-completed tasks
+      const activeIds = allTaskIds.filter(id => {
+        const t = tasks.find(x => x.id === id);
+        return t ? !t.completed : true;
+      });
+      if (activeIds.length > 0) {
+        setPrioritizedTasks([...prioritizedTaskIds, ...activeIds]);
+      }
+    } catch {}
   };
 
   const toggleProjectCollapse = (projectId: string) => {
@@ -694,9 +727,10 @@ export const useProjectStore = () => {
 
   // Persist prioritizedTaskIds
   const setPrioritizedTasks = (ids: string[]) => {
-    setPrioritizedTaskIds(ids);
+    const unique = Array.from(new Set(ids));
+    setPrioritizedTaskIds(unique);
     if (uid) {
-      setDoc(doc(db, 'users', uid, 'state', 'app'), { prioritizedTaskIds: ids }, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'users', uid, 'state', 'app'), { prioritizedTaskIds: unique }, { merge: true }).catch(() => {});
     }
   };
 

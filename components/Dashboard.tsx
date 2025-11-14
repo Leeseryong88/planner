@@ -188,7 +188,8 @@ export const Dashboard: React.FC<{
 
   // Source of truth: prioritized order filtered by "in progress root" and "not completed"
   const filteredPrioritized = useMemo(() => {
-    return store.prioritizedTaskIds.filter(id => {
+    const uniqueIds = Array.from(new Set(store.prioritizedTaskIds));
+    return uniqueIds.filter(id => {
       const t = tasksById[id];
       if (!t || t.completed) return false;
       const root = findRootProject(id);
