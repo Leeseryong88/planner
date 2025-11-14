@@ -91,9 +91,12 @@ export const MiniMap: React.FC<MiniMapProps> = ({
   }, [projects, tasks, viewportContent]);
 
   const scale = useMemo(() => {
-    const contentW = bounds.maxX - bounds.minX || 1;
-    const contentH = bounds.maxY - bounds.minY || 1;
-    return Math.min(width / contentW, height / contentH);
+    const contentW = (bounds.maxX - bounds.minX) || 1;
+    const contentH = (bounds.maxY - bounds.minY) || 1;
+    const s = Math.min(width / contentW, height / contentH);
+    // Guard against invalid scale (NaN/Infinity/0)
+    if (!isFinite(s) || s <= 0) return 0.1;
+    return s;
   }, [bounds, width, height]);
 
   const toMap = (cx: number, cy: number) => {
@@ -111,10 +114,24 @@ export const MiniMap: React.FC<MiniMapProps> = ({
   };
 
   const viewportMap = useMemo(() => {
+    const clamp = (v: number, minV: number, maxV: number) => Math.max(minV, Math.min(maxV, v));
     const tl = toMap(viewportContent.x, viewportContent.y);
     const br = toMap(viewportContent.x + viewportContent.w, viewportContent.y + viewportContent.h);
-    return { x: tl.x, y: tl.y, w: Math.max(8, br.x - tl.x), h: Math.max(8, br.y - tl.y) };
-  }, [viewportContent]);
+    let x = tl.x;
+    let y = tl.y;
+    let w = br.x - tl.x;
+    let h = br.y - tl.y;
+    if (!isFinite(x)) x = 0;
+    if (!isFinite(y)) y = 0;
+    if (!isFinite(w) || w <= 0) w = 8;
+    if (!isFinite(h) || h <= 0) h = 8;
+    w = Math.max(8, w);
+    h = Math.max(8, h);
+    // Keep rectangle within svg area
+    x = clamp(x, 0, Math.max(0, width - w));
+    y = clamp(y, 0, Math.max(0, height - h));
+    return { x, y, w, h };
+  }, [viewportContent, width, height]);
 
   const isDragging = useRef(false);
 
@@ -178,6 +195,7 @@ export const MiniMap: React.FC<MiniMapProps> = ({
           strokeWidth={1}
           rx={3}
           ry={3}
+          shapeRendering="crispEdges"
         />
       </svg>
     </div>
