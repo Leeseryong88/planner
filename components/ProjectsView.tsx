@@ -565,7 +565,7 @@ const CompletedProjectGridItem: React.FC<{
 );
 
 
-export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (projectId: string) => void; }> = ({ store, onProjectClick }) => {
+export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (projectId: string) => void; fixedMode?: 'projects' | 'tasks'; }> = ({ store, onProjectClick, fixedMode }) => {
   const [viewMode, setViewMode] = useState<'projects' | 'tasks'>('tasks');
   const cardSize: CardSize = 'sm';
   const [isCompletedSectionCollapsed, setIsCompletedSectionCollapsed] = useState(false);
@@ -601,7 +601,8 @@ export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (proj
   }, [tasks]);
 
   const renderContent = () => {
-    switch (viewMode) {
+    const mode = fixedMode ?? viewMode;
+    switch (mode) {
       case 'tasks':
         return <TaskPriorityView store={store} />;
       case 'projects':
@@ -668,16 +669,18 @@ export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (proj
 
   return (
     <div className="bg-secondary/50 rounded-lg p-4 border border-border-color">
-      <div className="flex justify-between items-center mb-6">
-            <div className="flex items-center gap-2 p-1 bg-primary rounded-lg shadow-sm">
-                <button onClick={() => setViewMode('tasks')} className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'tasks' ? 'bg-accent text-white shadow' : 'text-text-secondary hover:bg-gray-200'}`}>
-                    업무 우선순위
-                </button>
-                <button onClick={() => setViewMode('projects')} className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'projects' ? 'bg-accent text-white shadow' : 'text-text-secondary hover:bg-gray-200'}`}>
-                    프로젝트별 보기
-                </button>
-            </div>
-        </div>
+      {!fixedMode && (
+        <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center gap-2 p-1 bg-primary rounded-lg shadow-sm">
+                  <button onClick={() => setViewMode('tasks')} className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'tasks' ? 'bg-accent text-white shadow' : 'text-text-secondary hover:bg-gray-200'}`}>
+                      업무 우선순위
+                  </button>
+                  <button onClick={() => setViewMode('projects')} className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'projects' ? 'bg-accent text-white shadow' : 'text-text-secondary hover:bg-gray-200'}`}>
+                      프로젝트별 보기
+                  </button>
+              </div>
+          </div>
+      )}
       {renderContent()}
     </div>
   );

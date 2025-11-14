@@ -25,10 +25,10 @@ const App: React.FC = () => {
       case 'calendar':
         return <CalendarView store={projectStore} />;
       case 'projects':
-        return <ProjectsView store={projectStore} onProjectClick={handleNavigateToProject} />;
+        return <ProjectsView store={projectStore} onProjectClick={handleNavigateToProject} fixedMode="projects" />;
       case 'priority':
         // 같은 화면이지만 상단 탭만 다른 이름으로 접근
-        return <ProjectsView store={projectStore} onProjectClick={handleNavigateToProject} />;
+        return <ProjectsView store={projectStore} onProjectClick={handleNavigateToProject} fixedMode="tasks" />;
       case 'memos':
         return <NoteView store={projectStore} />;
       case 'dashboard':
