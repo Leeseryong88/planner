@@ -54,7 +54,7 @@ const TaskItem: React.FC<{
     };
     return (
       <div 
-        className="flex flex-col items-center justify-start w-20 select-none"
+        className="flex flex-col items-center justify-start w-20 h-10 select-none"
         onMouseEnter={(e) => onPreview?.(task, { x: e.clientX, y: e.clientY })}
         onMouseMove={handleMove}
         onMouseLeave={() => onPreviewEnd?.()}
@@ -62,7 +62,7 @@ const TaskItem: React.FC<{
         {/* Fixed icon row height to keep line height consistent */}
         <div className="h-6 flex items-center justify-center">
           {isDone ? (
-            <div className="rounded-full bg-gray-400 w-4 h-4" />
+            <div className="rounded-full bg-gray-400 w-5 h-5" />
           ) : (
             <div className="flex items-center justify-center rounded-full bg-sky-500 text-white w-5 h-5 text-[10px] font-bold leading-none">
               {priority ?? '•'}
@@ -355,7 +355,7 @@ const ProjectRow: React.FC<{ project: Project; onProjectClick: (id: string) => v
                                             <div className={`flex flex-col items-start`} style={{ position: 'relative' }}>
                                                 {(() => {
                                                     const items = layout.columns.get(depth)!;
-                                                    const rowUnit = size === 'sm' ? 48 : 104;
+                                                    const rowUnit = size === 'sm' ? 40 : 104;
                                                     let lastRow = -1;
                                                     return items.map(task => {
                                                         const r = layout.rowOf.get(task.id)!;
@@ -566,7 +566,7 @@ const CompletedProjectGridItem: React.FC<{
 
 
 export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (projectId: string) => void; }> = ({ store, onProjectClick }) => {
-  const [viewMode, setViewMode] = useState<'projects' | 'tasks'>('projects');
+  const [viewMode, setViewMode] = useState<'projects' | 'tasks'>('tasks');
   const cardSize: CardSize = 'sm';
   const [isCompletedSectionCollapsed, setIsCompletedSectionCollapsed] = useState(false);
   const { projects, tasks } = store;
@@ -670,11 +670,11 @@ export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (proj
     <div className="bg-secondary/50 rounded-lg p-4 border border-border-color">
       <div className="flex justify-between items-center mb-6">
             <div className="flex items-center gap-2 p-1 bg-primary rounded-lg shadow-sm">
-                <button onClick={() => setViewMode('projects')} className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'projects' ? 'bg-accent text-white shadow' : 'text-text-secondary hover:bg-gray-200'}`}>
-                    프로젝트별 보기
-                </button>
                 <button onClick={() => setViewMode('tasks')} className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'tasks' ? 'bg-accent text-white shadow' : 'text-text-secondary hover:bg-gray-200'}`}>
                     업무 우선순위
+                </button>
+                <button onClick={() => setViewMode('projects')} className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'projects' ? 'bg-accent text-white shadow' : 'text-text-secondary hover:bg-gray-200'}`}>
+                    프로젝트별 보기
                 </button>
             </div>
         </div>

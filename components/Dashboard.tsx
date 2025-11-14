@@ -186,6 +186,16 @@ export const Dashboard: React.FC<{
     return null;
   }, [tasksById, projectsById]);
 
+  // Source of truth: prioritized order filtered by "in progress root" and "not completed"
+  const filteredPrioritized = useMemo(() => {
+    return store.prioritizedTaskIds.filter(id => {
+      const t = tasksById[id];
+      if (!t || t.completed) return false;
+      const root = findRootProject(id);
+      return root?.status === ProjectStatus.InProgress;
+    });
+  }, [store.prioritizedTaskIds, tasksById, findRootProject]);
+
   const handleWheelCore = (clientX: number, clientY: number, deltaY: number) => {
     if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
@@ -431,6 +441,13 @@ export const Dashboard: React.FC<{
         onTouchMove={handleTouchMoveReact}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
+        onContextMenu={(e) => {
+          // Cancel linking with right-click (context menu)
+          if (linkingTaskId) {
+            e.preventDefault();
+            setLinkingTaskId(null);
+          }
+        }}
       >
         <div
           className="relative"
@@ -541,7 +558,7 @@ export const Dashboard: React.FC<{
           {store.tasks.map(task => {
               const parentProject = findRootProject(task.id);
               const isGroupDragging = !!parentProject && parentProject.id === draggedProjectId;
-              const priorityIndex = store.prioritizedTaskIds.indexOf(task.id);
+              const priorityIndex = filteredPrioritized.indexOf(task.id);
               const priority = priorityIndex > -1 ? priorityIndex + 1 : undefined;
 
               return (
