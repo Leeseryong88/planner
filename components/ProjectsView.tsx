@@ -4,7 +4,8 @@ import { Project, Task, ProjectStatus } from '../types';
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon, ChevronLeftIcon, ChevronRightIcon, AttachmentIcon } from './icons';
 import { useIsMobile } from '../hooks/useIsMobile';
 
-type CardSize = 'sm' | 'md';
+type CardSize = 'xs' | 'sm' | 'md';
+type Density = 'default' | 'compact' | 'ultra';
 
 // Simple renderer that supports pasted image markdown or direct/Storage image URLs
 const TaskContentPreview: React.FC<{ text?: string }> = ({ text }) => {
@@ -72,6 +73,19 @@ const TaskItem: React.FC<{
     dateClass = 'text-sky-600';
   }
 
+  if (size === 'xs') {
+    const isDone = isCompleted;
+    return (
+      <div className={`flex items-center gap-1 px-2 py-1 rounded-full border text-[10px] font-semibold ${isDone ? 'bg-gray-100 border-gray-200 text-gray-500' : 'bg-white border-border-color text-text-main shadow-sm'}`}>
+        {!isDone && priority && (
+          <span className="text-accent font-bold">{priority}</span>
+        )}
+        <span className="truncate max-w-[4.5rem]">{truncateTitle(task.title)}</span>
+        {isDone && <span className="text-green-500 text-[9px]">✓</span>}
+      </div>
+    );
+  }
+
   // Small mode: completed = gray dot, not-completed = blue priority badge
   if (size === 'sm') {
     const isDone = isCompleted;
@@ -129,7 +143,7 @@ const TaskItem: React.FC<{
 };
 
 
-const ProjectItem: React.FC<{ project: Project; onClick: () => void; compact?: boolean }> = ({ project, onClick, compact }) => {
+const ProjectItem: React.FC<{ project: Project; onClick: () => void; density: Density }> = ({ project, onClick, density }) => {
   const parseDate = (s?: string): Date | null => {
     if (!s) return null;
     const parts = s.split('-').map(Number);
@@ -145,21 +159,24 @@ const ProjectItem: React.FC<{ project: Project; onClick: () => void; compact?: b
   const isEndingSoon = !!endDate && (endDate.getTime() - today.getTime()) <= twoWeeksMs;
   const dateClass = isEndingSoon ? 'text-red-600 font-semibold' : 'text-text-secondary';
   const statusClasses = project.status === ProjectStatus.Completed ? 'bg-gray-100 border-gray-300' : 'bg-secondary border-accent';
-  const wrapperClasses = compact
-    ? `relative p-3 rounded-xl border w-full min-h-[88px] flex flex-col justify-between shadow-md ${statusClasses}`
-    : `relative p-4 rounded-lg border-2 w-full min-w-[12rem] max-w-[18rem] sm:w-56 h-24 flex flex-col justify-between shadow-md ${statusClasses}`;
-  const titleSize = compact ? 'text-sm' : 'text-base';
-  const dateSize = compact ? 'text-[11px]' : 'text-xs';
+  const isCompact = density !== 'default';
+  const isUltra = density === 'ultra';
+  const padding = isUltra ? 'p-2.5' : isCompact ? 'p-3' : 'p-4';
+  const borderWidth = isCompact ? 'border' : 'border-2';
+  const minHeight = isUltra ? 'min-h-[64px]' : isCompact ? 'min-h-[88px]' : 'h-24';
+  const titleSize = isUltra ? 'text-xs' : isCompact ? 'text-sm' : 'text-base';
+  const dateSize = isUltra ? 'text-[10px]' : isCompact ? 'text-[11px]' : 'text-xs';
+  const minWidth = isUltra ? 'min-w-[6.5rem]' : 'min-w-[9rem]';
 
   return (
     <div 
       onClick={onClick}
-      className={`${wrapperClasses} transition-all hover:shadow-lg hover:scale-[1.01] cursor-pointer`}
+      className={`relative ${padding} rounded-xl ${borderWidth} w-full ${minWidth} flex flex-col justify-between shadow-md ${statusClasses} ${minHeight} transition-all hover:shadow-lg hover:scale-[1.01] cursor-pointer`}
       title="캔버스에서 보기"
     >
       <h3 className={`font-bold ${titleSize} ${project.status === ProjectStatus.Completed ? 'text-text-secondary' : 'text-text-main'} truncate`}>{project.title}</h3>
       <span className={`${dateSize} ${dateClass} truncate`}>{display}</span>
-      {project.status === ProjectStatus.Completed && !compact && (
+      {project.status === ProjectStatus.Completed && density === 'default' && (
         <CheckIcon className="w-6 h-6 text-success absolute -top-3 -right-3 bg-secondary rounded-full p-1 border border-gray-300" />
       )}
     </div>
@@ -204,8 +221,8 @@ const ProjectRow: React.FC<{
     childTasksByParentId: Map<string, Task[]>;
     store: ProjectStore;
     size: CardSize;
-    isMobile?: boolean;
-}> = ({ project, onProjectClick, childTasksByParentId, store, size, isMobile }) => {
+    density: Density;
+}> = ({ project, onProjectClick, childTasksByParentId, store, size, density }) => {
     const scrollRef = React.useRef<HTMLDivElement>(null);
     const [showLeft, setShowLeft] = React.useState(false);
     const [showRight, setShowRight] = React.useState(false);
@@ -380,12 +397,17 @@ const ProjectRow: React.FC<{
         });
     }, [store.prioritizedTaskIds, store.tasks, store.projects]);
 
-    const rowClass = `flex ${isMobile ? 'items-start gap-3 p-3' : 'items-center p-4'} bg-primary rounded-lg shadow-inner transition-opacity duration-300 ${project.status === ProjectStatus.Completed ? 'opacity-70 hover:opacity-100' : ''}`;
+    const paddingClass = density === 'ultra' ? 'p-2' : density === 'compact' ? 'p-3' : 'p-4';
+    const alignClass = density === 'default' ? 'items-center' : 'items-start';
+    const gapClass = density === 'default' ? 'gap-4' : density === 'ultra' ? 'gap-2' : 'gap-3';
+    const rowClass = `flex ${alignClass} ${paddingClass} ${gapClass} bg-primary rounded-lg shadow-inner transition-opacity duration-300 ${project.status === ProjectStatus.Completed ? 'opacity-70 hover:opacity-100' : ''}`;
+    const cardMinWidthClass = density === 'ultra' ? 'min-w-[6.5rem]' : density === 'compact' ? 'min-w-[8rem]' : 'min-w-[9rem]';
+    const effectiveSize: CardSize = density === 'ultra' ? 'xs' : size;
 
     return (
         <div className={rowClass}>
-            <div className="flex-shrink-0 relative min-w-[9rem]">
-                <ProjectItem project={project} onClick={() => onProjectClick(project.id)} compact={isMobile} />
+            <div className={`flex-shrink-0 relative ${cardMinWidthClass}`}>
+                <ProjectItem project={project} onClick={() => onProjectClick(project.id)} density={density} />
                 {project.status === ProjectStatus.Completed && (
                     <button 
                         onClick={() => store.toggleProjectCollapse(project.id)}
@@ -413,7 +435,7 @@ const ProjectRow: React.FC<{
                                             <div className={`flex flex-col items-start`} style={{ position: 'relative' }}>
                                                 {(() => {
                                                     const items = layout.columns.get(depth)!;
-                                                    const rowUnit = size === 'sm' ? 40 : 104;
+                                                    const rowUnit = size === 'xs' ? 28 : size === 'sm' ? 40 : 104;
                                                     let lastRow = -1;
                                                     return items.map(task => {
                                                         const r = layout.rowOf.get(task.id)!;
@@ -428,7 +450,7 @@ const ProjectRow: React.FC<{
                                                                     task={task}
                                                                     projectStatus={project.status}
                                                                     priority={priority}
-                                                                    size={size}
+                                                                    size={effectiveSize}
                                                                     onPreview={(t, pos) => setPreview({ task: t, pos })}
                                                                     onPreviewEnd={() => setPreview({ task: null, pos: { x: 0, y: 0 } })}
                                                                 />
@@ -550,6 +572,14 @@ const TaskPriorityView: React.FC<{ store: ProjectStore }> = ({ store }) => {
     const holdTimerRef = React.useRef<number | null>(null);
     const holdStartRef = React.useRef<{ x: number; y: number } | null>(null);
     const itemRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
+    const overscrollRef = React.useRef<string | null>(null);
+    const pointerIdRef = React.useRef<number | null>(null);
+    const detachPointerListenersRef = React.useRef<(() => void) | null>(null);
+    const dragStateRef = React.useRef(dragState);
+
+    useEffect(() => {
+        dragStateRef.current = dragState;
+    }, [dragState]);
 
     useEffect(() => {
         return () => {
@@ -558,6 +588,15 @@ const TaskPriorityView: React.FC<{ store: ProjectStore }> = ({ store }) => {
                 holdTimerRef.current = null;
             }
             document.body.style.userSelect = '';
+            if (overscrollRef.current !== null) {
+                document.documentElement.style.overscrollBehaviorY = overscrollRef.current;
+                overscrollRef.current = null;
+            }
+            if (detachPointerListenersRef.current) {
+                detachPointerListenersRef.current();
+                detachPointerListenersRef.current = null;
+            }
+            pointerIdRef.current = null;
         };
     }, []);
 
@@ -568,8 +607,105 @@ const TaskPriorityView: React.FC<{ store: ProjectStore }> = ({ store }) => {
         }
     };
 
+    const detachPointerListeners = useCallback(() => {
+        if (detachPointerListenersRef.current) {
+            detachPointerListenersRef.current();
+            detachPointerListenersRef.current = null;
+        }
+    }, []);
+
+    const finishDrag = useCallback((commit: boolean, finalOrder?: string[]) => {
+        const current = dragStateRef.current;
+        const orderToCommit = finalOrder ?? current.order;
+        if (commit && current.id && orderToCommit.length) {
+            setPrioritizedTasks(orderToCommit);
+        }
+        document.body.style.userSelect = '';
+        if (overscrollRef.current !== null) {
+            document.documentElement.style.overscrollBehaviorY = overscrollRef.current;
+            overscrollRef.current = null;
+        }
+        detachPointerListeners();
+        pointerIdRef.current = null;
+        setDragState({ id: null, pointerId: null, order: [] });
+        setDragHover({ id: null, afterEnd: false });
+    }, [detachPointerListeners, setPrioritizedTasks]);
+
+    const calculateInsertion = (order: string[], dragId: string, pointerY: number) => {
+        const siblings = order.filter(id => id !== dragId);
+        let insertIndex = siblings.length;
+        let hoverId: string | null = siblings[siblings.length - 1] || null;
+        let afterEnd = siblings.length > 0;
+        for (let i = 0; i < siblings.length; i++) {
+            const id = siblings[i];
+            const el = itemRefs.current[id];
+            if (!el) continue;
+            const rect = el.getBoundingClientRect();
+            const threshold = rect.top + rect.height / 2;
+            if (pointerY < threshold) {
+                insertIndex = i;
+                hoverId = id;
+                afterEnd = false;
+                break;
+            }
+        }
+        if (siblings.length === 0) {
+            hoverId = null;
+            afterEnd = false;
+        }
+        return { insertIndex, hoverId, afterEnd };
+    };
+
+    const attachPointerListeners = useCallback((pointerId: number) => {
+        detachPointerListeners();
+        const handleMove = (ev: PointerEvent) => {
+            if (pointerIdRef.current !== ev.pointerId) return;
+            ev.preventDefault();
+            const current = dragStateRef.current;
+            if (!current.id) return;
+            const { insertIndex, hoverId, afterEnd } = calculateInsertion(current.order, current.id, ev.clientY);
+            setDragState(prev => {
+                if (!prev.id) return prev;
+                const updatedOrder = reorderWithInsert(prev.order, prev.id, insertIndex);
+                const isSame = updatedOrder.length === prev.order.length && updatedOrder.every((id, idx) => id === prev.order[idx]);
+                return isSame ? prev : { ...prev, order: updatedOrder };
+            });
+            setDragHover({ id: hoverId, afterEnd });
+        };
+        const handleUp = (ev: PointerEvent) => {
+            if (pointerIdRef.current !== ev.pointerId) return;
+            ev.preventDefault();
+            finishDrag(true, dragStateRef.current.order);
+        };
+        const handleCancel = (ev: PointerEvent) => {
+            if (pointerIdRef.current !== ev.pointerId) return;
+            ev.preventDefault();
+            finishDrag(false);
+        };
+        window.addEventListener('pointermove', handleMove, { passive: false });
+        window.addEventListener('pointerup', handleUp, { passive: false });
+        window.addEventListener('pointercancel', handleCancel, { passive: false });
+        detachPointerListenersRef.current = () => {
+            window.removeEventListener('pointermove', handleMove);
+            window.removeEventListener('pointerup', handleUp);
+            window.removeEventListener('pointercancel', handleCancel);
+        };
+    }, [detachPointerListeners, finishDrag]);
+
+    useEffect(() => {
+        return () => {
+            detachPointerListeners();
+        };
+    }, [detachPointerListeners]);
+
     const startDrag = useCallback((taskId: string, pointerId: number) => {
         document.body.style.userSelect = 'none';
+        if (overscrollRef.current === null) {
+            overscrollRef.current = document.documentElement.style.overscrollBehaviorY || '';
+            document.documentElement.style.overscrollBehaviorY = 'contain';
+        }
+        pointerIdRef.current = pointerId;
+        attachPointerListeners(pointerId);
         setDragState({
             id: taskId,
             pointerId,
@@ -578,19 +714,9 @@ const TaskPriorityView: React.FC<{ store: ProjectStore }> = ({ store }) => {
         setDragHover({ id: null, afterEnd: false });
     }, [sortedTasks]);
 
-    const finishDrag = useCallback((commit: boolean) => {
-        if (commit && dragState.id) {
-            setPrioritizedTasks(dragState.order);
-        }
-        document.body.style.userSelect = '';
-        setDragState({ id: null, pointerId: null, order: [] });
-        setDragHover({ id: null, afterEnd: false });
-    }, [dragState.id, dragState.order, setPrioritizedTasks]);
-
     const handlePointerDown = (taskId: string) => (e: React.PointerEvent<HTMLDivElement>) => {
         e.stopPropagation();
         holdStartRef.current = { x: e.clientX, y: e.clientY };
-        e.currentTarget.setPointerCapture(e.pointerId);
         if (e.pointerType === 'mouse') {
             startDrag(taskId, e.pointerId);
         } else {
@@ -607,55 +733,20 @@ const TaskPriorityView: React.FC<{ store: ProjectStore }> = ({ store }) => {
             const dy = e.clientY - holdStartRef.current.y;
             if (Math.hypot(dx, dy) > 12) {
                 clearHoldTimer();
-                try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
             }
         }
-        if (!dragState.id || dragState.pointerId !== e.pointerId) return;
-        e.preventDefault();
-        const pointerY = e.clientY;
-        const order = dragState.order;
-        const dragId = dragState.id;
-        const siblings = order.filter(id => id !== dragId);
-        let insertIndex = siblings.length;
-        let hoverId: string | null = siblings[siblings.length - 1] || null;
-        let afterEnd = true;
-        for (let i = 0; i < siblings.length; i++) {
-            const id = siblings[i];
-            const el = itemRefs.current[id];
-            if (!el) continue;
-            const rect = el.getBoundingClientRect();
-            const threshold = rect.top + rect.height / 2;
-            if (pointerY < threshold) {
-                insertIndex = i;
-                hoverId = id;
-                afterEnd = false;
-                break;
-            }
-        }
-        setDragHover({ id: hoverId, afterEnd: afterEnd && siblings.length > 0 });
-        setDragState(prev => ({
-            ...prev,
-            order: reorderWithInsert(prev.order, dragId, insertIndex),
-        }));
     };
 
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
         if (holdTimerRef.current) {
             clearHoldTimer();
-            try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
             return;
-        }
-        if (dragState.id && dragState.pointerId === e.pointerId) {
-            e.preventDefault();
-            try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
-            finishDrag(true);
         }
     };
 
     const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
         clearHoldTimer();
-        if (dragState.id && dragState.pointerId === e.pointerId) {
-            try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+        if (pointerIdRef.current === e.pointerId) {
             finishDrag(false);
         }
     };
@@ -674,7 +765,7 @@ const TaskPriorityView: React.FC<{ store: ProjectStore }> = ({ store }) => {
     }
     
     return (
-        <div className="space-y-3 p-4">
+        <div className="space-y-3 p-4" style={{ touchAction: dragState.id ? 'none' : 'pan-y' }}>
             <h3 className="text-lg font-bold text-text-main mb-4">작업 우선순위 설정</h3>
             <p className="text-sm text-text-secondary mb-4">작업을 드래그하여 우선순위를 변경하세요. 가장 위에 있는 작업이 1순위입니다.</p>
             {displayTasks.map((task, index) => {
@@ -719,10 +810,10 @@ const CompletedProjectGridItem: React.FC<{
   project: Project;
   onProjectClick: (id: string) => void;
   store: ProjectStore;
-  compact?: boolean;
-}> = ({ project, onProjectClick, store, compact }) => (
+  density: Density;
+}> = ({ project, onProjectClick, store, density }) => (
   <div className="relative">
-    <ProjectItem project={project} onClick={() => onProjectClick(project.id)} compact={compact} />
+    <ProjectItem project={project} onClick={() => onProjectClick(project.id)} density={density} />
     <button
       onClick={() => store.toggleProjectCollapse(project.id)}
       className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-secondary hover:bg-gray-100 rounded-full p-1 border border-gray-300 shadow-md transition-transform hover:scale-110 z-10"
@@ -736,8 +827,10 @@ const CompletedProjectGridItem: React.FC<{
 
 export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (projectId: string) => void; fixedMode?: 'projects' | 'tasks'; }> = ({ store, onProjectClick, fixedMode }) => {
   const [viewMode, setViewMode] = useState<'projects' | 'tasks'>('tasks');
-  const isMobile = useIsMobile();
-  const cardSize: CardSize = 'sm';
+  const isCompactScreen = useIsMobile();
+  const isUltraScreen = useIsMobile(500);
+  const density: Density = isUltraScreen ? 'ultra' : (isCompactScreen ? 'compact' : 'default');
+  const cardSize: CardSize = density === 'ultra' ? 'xs' : 'sm';
   const [isCompletedSectionCollapsed, setIsCompletedSectionCollapsed] = useState(false);
   const { projects, tasks } = store;
 
@@ -792,7 +885,7 @@ export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (proj
                   childTasksByParentId={childTasksByParentId}
                   store={store}
                   size={cardSize}
-                  isMobile={isMobile}
+                  density={density}
                 />
               ))}
             </div>
@@ -824,7 +917,7 @@ export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (proj
                         project={project} 
                         onProjectClick={onProjectClick} 
                         store={store}
-                        compact={isMobile}
+                        density={density}
                       />
                     ))}
                   </div>
@@ -839,7 +932,7 @@ export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (proj
                               childTasksByParentId={childTasksByParentId}
                               store={store}
                               size={cardSize}
-                              isMobile={isMobile}
+                              density={density}
                             />
                         ))}
                     </div>
