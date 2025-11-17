@@ -11,6 +11,8 @@ import { TaskView } from './TaskView';
 import { MiniMap } from './MiniMap';
 
 
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
 const LineStyleEditor: React.FC<{
   isOpen: boolean;
   onClose: () => void;
@@ -84,6 +86,7 @@ export const Dashboard: React.FC<{
   const [creationMenuPos, setCreationMenuPos] = useState<{ canvasX: number; canvasY: number; clientX: number, clientY: number } | null>(null);
   const [groupPreviewOffset, setGroupPreviewOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [taskPreview, setTaskPreview] = useState<{ id: string | null; offset: { x: number; y: number } }>({ id: null, offset: { x: 0, y: 0 } });
+  const pinchRef = useRef<{ distance: number; zoom: number; centerCanvas: { x: number; y: number }; centerClient: { x: number; y: number } } | null>(null);
 
 
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -246,17 +249,61 @@ export const Dashboard: React.FC<{
     if(canvasRef.current) canvasRef.current.style.cursor = 'grab';
   };
   
+  const getCanvasPoint = (clientX: number, clientY: number) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return {
+      x: (clientX - rect.left - pan.x) / zoom,
+      y: (clientY - rect.top - pan.y) / zoom,
+    };
+  };
+
   const handleTouchStart = (e: ReactTouchEvent) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const [t1, t2] = [e.touches[0], e.touches[1]];
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const centerClient = { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
+      const centerCanvas = getCanvasPoint(centerClient.x, centerClient.y);
+      pinchRef.current = { distance: dist, zoom, centerCanvas, centerClient };
+      return;
+    }
+    pinchRef.current = null;
     if (e.target === e.currentTarget && e.touches.length === 1) {
-        if (creationMenuPos) {
-          setCreationMenuPos(null);
-        }
-        setIsPanning(true);
-        setStartPoint({ x: e.touches[0].clientX - pan.x, y: e.touches[0].clientY - pan.y });
+      if (creationMenuPos) setCreationMenuPos(null);
+      setIsPanning(true);
+      setStartPoint({ x: e.touches[0].clientX - pan.x, y: e.touches[0].clientY - pan.y });
     }
   };
 
   const handleTouchMoveReact = (e: ReactTouchEvent) => {
+    if (pinchRef.current && e.touches.length >= 2) {
+      e.preventDefault();
+      const [t1, t2] = [e.touches[0], e.touches[1]];
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const ratio = dist / pinchRef.current.distance;
+      const unclampedZoom = pinchRef.current.zoom * ratio;
+      const newZoom = clamp(unclampedZoom, 0.2, 2);
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        const centerClient = { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
+        const centerCanvas = getCanvasPoint(centerClient.x, centerClient.y);
+        const cx = centerCanvas.x;
+        const cy = centerCanvas.y;
+        const newPanX = centerClient.x - rect.left - cx * newZoom;
+        const newPanY = centerClient.y - rect.top - cy * newZoom;
+        setZoom(newZoom);
+        setPan({ x: newPanX, y: newPanY });
+        // reset pinch reference to avoid drift when hitting zoom limits
+        pinchRef.current = {
+          distance: dist,
+          zoom: newZoom,
+          centerCanvas,
+          centerClient,
+        };
+      }
+      return;
+    }
     if (!isPanning || e.touches.length !== 1) return;
     setPan({
       x: e.touches[0].clientX - startPoint.x,
@@ -265,7 +312,11 @@ export const Dashboard: React.FC<{
   };
 
   const handleTouchEnd = () => {
-      setIsPanning(false);
+    if (pinchRef.current) {
+      pinchRef.current = null;
+      return;
+    }
+    setIsPanning(false);
   };
 
   // Attach non-passive listeners to allow preventDefault safely

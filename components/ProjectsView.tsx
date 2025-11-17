@@ -1,7 +1,8 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { ProjectStore } from '../hooks/useProjectStore';
 import { Project, Task, ProjectStatus } from '../types';
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon, ChevronLeftIcon, ChevronRightIcon, AttachmentIcon } from './icons';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 type CardSize = 'sm' | 'md';
 
@@ -128,7 +129,7 @@ const TaskItem: React.FC<{
 };
 
 
-const ProjectItem: React.FC<{ project: Project; onClick: () => void; }> = ({ project, onClick }) => {
+const ProjectItem: React.FC<{ project: Project; onClick: () => void; compact?: boolean }> = ({ project, onClick, compact }) => {
   const parseDate = (s?: string): Date | null => {
     if (!s) return null;
     const parts = s.split('-').map(Number);
@@ -143,15 +144,22 @@ const ProjectItem: React.FC<{ project: Project; onClick: () => void; }> = ({ pro
   const twoWeeksMs = 14 * 24 * 60 * 60 * 1000;
   const isEndingSoon = !!endDate && (endDate.getTime() - today.getTime()) <= twoWeeksMs;
   const dateClass = isEndingSoon ? 'text-red-600 font-semibold' : 'text-text-secondary';
+  const statusClasses = project.status === ProjectStatus.Completed ? 'bg-gray-100 border-gray-300' : 'bg-secondary border-accent';
+  const wrapperClasses = compact
+    ? `relative p-3 rounded-xl border w-full min-h-[88px] flex flex-col justify-between shadow-md ${statusClasses}`
+    : `relative p-4 rounded-lg border-2 w-full min-w-[12rem] max-w-[18rem] sm:w-56 h-24 flex flex-col justify-between shadow-md ${statusClasses}`;
+  const titleSize = compact ? 'text-sm' : 'text-base';
+  const dateSize = compact ? 'text-[11px]' : 'text-xs';
+
   return (
     <div 
       onClick={onClick}
-      className={`relative p-4 rounded-lg border-2 w-56 h-24 flex flex-col justify-between shadow-md transition-all hover:shadow-lg hover:scale-105 cursor-pointer ${project.status === ProjectStatus.Completed ? 'bg-gray-100 border-gray-300' : 'bg-secondary border-accent'}`}
+      className={`${wrapperClasses} transition-all hover:shadow-lg hover:scale-[1.01] cursor-pointer`}
       title="캔버스에서 보기"
     >
-      <h3 className={`font-bold text-base ${project.status === ProjectStatus.Completed ? 'text-text-secondary' : 'text-text-main'}`}>{project.title}</h3>
-      <span className={`text-xs ${dateClass}`}>{display}</span>
-      {project.status === ProjectStatus.Completed && (
+      <h3 className={`font-bold ${titleSize} ${project.status === ProjectStatus.Completed ? 'text-text-secondary' : 'text-text-main'} truncate`}>{project.title}</h3>
+      <span className={`${dateSize} ${dateClass} truncate`}>{display}</span>
+      {project.status === ProjectStatus.Completed && !compact && (
         <CheckIcon className="w-6 h-6 text-success absolute -top-3 -right-3 bg-secondary rounded-full p-1 border border-gray-300" />
       )}
     </div>
@@ -190,7 +198,14 @@ const TaskBranch: React.FC<{ task: Task; childTasksByParentId: Map<string, Task[
 };
 
 
-const ProjectRow: React.FC<{ project: Project; onProjectClick: (id: string) => void; childTasksByParentId: Map<string, Task[]>; store: ProjectStore; size: CardSize }> = ({ project, onProjectClick, childTasksByParentId, store, size }) => {
+const ProjectRow: React.FC<{
+    project: Project;
+    onProjectClick: (id: string) => void;
+    childTasksByParentId: Map<string, Task[]>;
+    store: ProjectStore;
+    size: CardSize;
+    isMobile?: boolean;
+}> = ({ project, onProjectClick, childTasksByParentId, store, size, isMobile }) => {
     const scrollRef = React.useRef<HTMLDivElement>(null);
     const [showLeft, setShowLeft] = React.useState(false);
     const [showRight, setShowRight] = React.useState(false);
@@ -365,12 +380,12 @@ const ProjectRow: React.FC<{ project: Project; onProjectClick: (id: string) => v
         });
     }, [store.prioritizedTaskIds, store.tasks, store.projects]);
 
+    const rowClass = `flex ${isMobile ? 'items-start gap-3 p-3' : 'items-center p-4'} bg-primary rounded-lg shadow-inner transition-opacity duration-300 ${project.status === ProjectStatus.Completed ? 'opacity-70 hover:opacity-100' : ''}`;
+
     return (
-        <div
-            className={`flex items-center p-4 bg-primary rounded-lg shadow-inner transition-opacity duration-300 ${project.status === ProjectStatus.Completed ? 'opacity-70 hover:opacity-100' : ''}`}
-        >
-            <div className="flex-shrink-0 relative">
-                <ProjectItem project={project} onClick={() => onProjectClick(project.id)} />
+        <div className={rowClass}>
+            <div className="flex-shrink-0 relative min-w-[9rem]">
+                <ProjectItem project={project} onClick={() => onProjectClick(project.id)} compact={isMobile} />
                 {project.status === ProjectStatus.Completed && (
                     <button 
                         onClick={() => store.toggleProjectCollapse(project.id)}
@@ -471,6 +486,13 @@ const ProjectRow: React.FC<{ project: Project; onProjectClick: (id: string) => v
 };
 
 
+const reorderWithInsert = (order: string[], dragId: string, insertIndex: number) => {
+    const filtered = order.filter(id => id !== dragId);
+    const clamped = Math.max(0, Math.min(insertIndex, filtered.length));
+    filtered.splice(clamped, 0, dragId);
+    return filtered;
+};
+
 const TaskPriorityView: React.FC<{ store: ProjectStore }> = ({ store }) => {
     const { projects, tasks, prioritizedTaskIds, setPrioritizedTasks } = store;
 
@@ -519,37 +541,128 @@ const TaskPriorityView: React.FC<{ store: ProjectStore }> = ({ store }) => {
         return [...prioritized, ...unprioritized];
     }, [tasksForPrioritization, prioritizedTaskIds]);
     
-    const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+    const [dragState, setDragState] = useState<{
+        id: string | null;
+        pointerId: number | null;
+        order: string[];
+    }>({ id: null, pointerId: null, order: [] });
+    const [dragHover, setDragHover] = useState<{ id: string | null; afterEnd: boolean }>({ id: null, afterEnd: false });
+    const holdTimerRef = React.useRef<number | null>(null);
+    const holdStartRef = React.useRef<{ x: number; y: number } | null>(null);
+    const itemRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
 
-    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, taskId: string) => {
-        setDraggedTaskId(taskId);
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', taskId);
+    useEffect(() => {
+        return () => {
+            if (holdTimerRef.current) {
+                window.clearTimeout(holdTimerRef.current);
+                holdTimerRef.current = null;
+            }
+            document.body.style.userSelect = '';
+        };
+    }, []);
+
+    const clearHoldTimer = () => {
+        if (holdTimerRef.current) {
+            window.clearTimeout(holdTimerRef.current);
+            holdTimerRef.current = null;
+        }
     };
 
-    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    const startDrag = useCallback((taskId: string, pointerId: number) => {
+        document.body.style.userSelect = 'none';
+        setDragState({
+            id: taskId,
+            pointerId,
+            order: sortedTasks.map(t => t.id),
+        });
+        setDragHover({ id: null, afterEnd: false });
+    }, [sortedTasks]);
+
+    const finishDrag = useCallback((commit: boolean) => {
+        if (commit && dragState.id) {
+            setPrioritizedTasks(dragState.order);
+        }
+        document.body.style.userSelect = '';
+        setDragState({ id: null, pointerId: null, order: [] });
+        setDragHover({ id: null, afterEnd: false });
+    }, [dragState.id, dragState.order, setPrioritizedTasks]);
+
+    const handlePointerDown = (taskId: string) => (e: React.PointerEvent<HTMLDivElement>) => {
+        e.stopPropagation();
+        holdStartRef.current = { x: e.clientX, y: e.clientY };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        if (e.pointerType === 'mouse') {
+            startDrag(taskId, e.pointerId);
+        } else {
+            holdTimerRef.current = window.setTimeout(() => {
+                startDrag(taskId, e.pointerId);
+                holdTimerRef.current = null;
+            }, 220);
+        }
+    };
+
+    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (holdTimerRef.current && holdStartRef.current) {
+            const dx = e.clientX - holdStartRef.current.x;
+            const dy = e.clientY - holdStartRef.current.y;
+            if (Math.hypot(dx, dy) > 12) {
+                clearHoldTimer();
+                try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+            }
+        }
+        if (!dragState.id || dragState.pointerId !== e.pointerId) return;
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
+        const pointerY = e.clientY;
+        const order = dragState.order;
+        const dragId = dragState.id;
+        const siblings = order.filter(id => id !== dragId);
+        let insertIndex = siblings.length;
+        let hoverId: string | null = siblings[siblings.length - 1] || null;
+        let afterEnd = true;
+        for (let i = 0; i < siblings.length; i++) {
+            const id = siblings[i];
+            const el = itemRefs.current[id];
+            if (!el) continue;
+            const rect = el.getBoundingClientRect();
+            const threshold = rect.top + rect.height / 2;
+            if (pointerY < threshold) {
+                insertIndex = i;
+                hoverId = id;
+                afterEnd = false;
+                break;
+            }
+        }
+        setDragHover({ id: hoverId, afterEnd: afterEnd && siblings.length > 0 });
+        setDragState(prev => ({
+            ...prev,
+            order: reorderWithInsert(prev.order, dragId, insertIndex),
+        }));
     };
 
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetTaskId: string) => {
-        e.preventDefault();
-        if (!draggedTaskId || draggedTaskId === targetTaskId) return;
-
-        const currentTaskIds = sortedTasks.map(t => t.id);
-        const draggedIndex = currentTaskIds.indexOf(draggedTaskId);
-        const targetIndex = currentTaskIds.indexOf(targetTaskId);
-        
-        const newIds = [...currentTaskIds];
-        const [removed] = newIds.splice(draggedIndex, 1);
-        newIds.splice(targetIndex, 0, removed);
-        
-        setPrioritizedTasks(newIds);
+    const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (holdTimerRef.current) {
+            clearHoldTimer();
+            try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+            return;
+        }
+        if (dragState.id && dragState.pointerId === e.pointerId) {
+            e.preventDefault();
+            try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+            finishDrag(true);
+        }
     };
 
-    const handleDragEnd = () => {
-        setDraggedTaskId(null);
+    const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+        clearHoldTimer();
+        if (dragState.id && dragState.pointerId === e.pointerId) {
+            try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+            finishDrag(false);
+        }
     };
+
+    const displayTasks = dragState.id
+        ? dragState.order.map(id => tasksById[id]).filter((t): t is Task => !!t)
+        : sortedTasks;
 
     if (tasksForPrioritization.length === 0) {
         return (
@@ -564,17 +677,22 @@ const TaskPriorityView: React.FC<{ store: ProjectStore }> = ({ store }) => {
         <div className="space-y-3 p-4">
             <h3 className="text-lg font-bold text-text-main mb-4">작업 우선순위 설정</h3>
             <p className="text-sm text-text-secondary mb-4">작업을 드래그하여 우선순위를 변경하세요. 가장 위에 있는 작업이 1순위입니다.</p>
-            {sortedTasks.map((task, index) => {
+            {displayTasks.map((task, index) => {
                 const project = findRootProjectForTask(task.id);
+                const isDragging = dragState.id === task.id;
+                const isHoverTarget = dragHover.id === task.id && !dragHover.afterEnd;
                 return (
                     <div
                         key={task.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, task.id)}
-                        onDragOver={handleDragOver}
-                        onDrop={(e) => handleDrop(e, task.id)}
-                        onDragEnd={handleDragEnd}
-                        className={`flex items-center p-3 rounded-lg border cursor-grab transition-all ${draggedTaskId === task.id ? 'opacity-50' : ''} bg-secondary border-border-color shadow-sm`}
+                        ref={(el) => { itemRefs.current[task.id] = el; }}
+                        onPointerDown={handlePointerDown(task.id)}
+                        onPointerMove={handlePointerMove}
+                        onPointerUp={handlePointerUp}
+                        onPointerCancel={handlePointerCancel}
+                        className={`flex items-center p-3 rounded-lg border transition-all select-none bg-secondary border-border-color shadow-sm ${
+                            isDragging ? 'ring-2 ring-accent shadow-2xl scale-[1.02]' : ''
+                        } ${isHoverTarget ? 'ring-2 ring-accent/50' : ''}`}
+                        style={{ touchAction: dragState.id ? 'none' : 'manipulation', cursor: dragState.id ? 'grabbing' : 'grab' }}
                     >
                         <div className="flex items-center justify-center w-8 h-8 mr-4 bg-accent text-white rounded-full font-bold text-sm flex-shrink-0">
                             {index + 1}
@@ -588,6 +706,11 @@ const TaskPriorityView: React.FC<{ store: ProjectStore }> = ({ store }) => {
                     </div>
                 );
             })}
+            {dragState.id && dragHover.afterEnd && (
+                <div className="h-10 rounded-lg border-2 border-dashed border-accent/60 flex items-center justify-center text-xs text-accent animate-pulse">
+                    여기로 이동
+                </div>
+            )}
         </div>
     );
 };
@@ -596,9 +719,10 @@ const CompletedProjectGridItem: React.FC<{
   project: Project;
   onProjectClick: (id: string) => void;
   store: ProjectStore;
-}> = ({ project, onProjectClick, store }) => (
+  compact?: boolean;
+}> = ({ project, onProjectClick, store, compact }) => (
   <div className="relative">
-    <ProjectItem project={project} onClick={() => onProjectClick(project.id)} />
+    <ProjectItem project={project} onClick={() => onProjectClick(project.id)} compact={compact} />
     <button
       onClick={() => store.toggleProjectCollapse(project.id)}
       className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-secondary hover:bg-gray-100 rounded-full p-1 border border-gray-300 shadow-md transition-transform hover:scale-110 z-10"
@@ -612,6 +736,7 @@ const CompletedProjectGridItem: React.FC<{
 
 export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (projectId: string) => void; fixedMode?: 'projects' | 'tasks'; }> = ({ store, onProjectClick, fixedMode }) => {
   const [viewMode, setViewMode] = useState<'projects' | 'tasks'>('tasks');
+  const isMobile = useIsMobile();
   const cardSize: CardSize = 'sm';
   const [isCompletedSectionCollapsed, setIsCompletedSectionCollapsed] = useState(false);
   const { projects, tasks } = store;
@@ -660,7 +785,15 @@ export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (proj
           <div className="space-y-8">
             <div>
               {inProgressProjects.map(project => (
-                <ProjectRow key={project.id} project={project} onProjectClick={onProjectClick} childTasksByParentId={childTasksByParentId} store={store} size={cardSize} />
+                <ProjectRow
+                  key={project.id}
+                  project={project}
+                  onProjectClick={onProjectClick}
+                  childTasksByParentId={childTasksByParentId}
+                  store={store}
+                  size={cardSize}
+                  isMobile={isMobile}
+                />
               ))}
             </div>
 
@@ -690,7 +823,8 @@ export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (proj
                         key={project.id} 
                         project={project} 
                         onProjectClick={onProjectClick} 
-                        store={store} 
+                        store={store}
+                        compact={isMobile}
                       />
                     ))}
                   </div>
@@ -698,7 +832,15 @@ export const ProjectsView: React.FC<{ store: ProjectStore; onProjectClick: (proj
                   {expandedCompletedProjects.length > 0 && (
                     <div className="space-y-8 mt-12 pt-8 border-t border-border-color border-dashed">
                         {expandedCompletedProjects.map(project => (
-                            <ProjectRow key={project.id} project={project} onProjectClick={onProjectClick} childTasksByParentId={childTasksByParentId} store={store} size={cardSize} />
+                            <ProjectRow
+                              key={project.id}
+                              project={project}
+                              onProjectClick={onProjectClick}
+                              childTasksByParentId={childTasksByParentId}
+                              store={store}
+                              size={cardSize}
+                              isMobile={isMobile}
+                            />
                         ))}
                     </div>
                   )}
