@@ -599,6 +599,9 @@ export const useProjectStore = () => {
 
   const linkTaskToTask = (childTaskId: string, parentTaskId: string) => {
     const completionTimestamp = new Date().toISOString();
+    // Preserve existing completionDate of parent if already completed
+    const parentBefore = tasks.find(t => t.id === parentTaskId);
+    const effectiveCompletionDate = parentBefore?.completionDate ?? completionTimestamp;
     setPrioritizedTaskIds(prev => [...prev.filter(id => id !== parentTaskId), childTaskId]);
     setTasks(prev => prev.map(t => {
       if (t.id === childTaskId) {
@@ -607,7 +610,7 @@ export const useProjectStore = () => {
       }
       if (t.id === parentTaskId) {
         // Mark parent task as completed
-        return { ...t, completed: true, completionDate: completionTimestamp };
+        return { ...t, completed: true, completionDate: effectiveCompletionDate };
       }
       return t;
     }));
@@ -620,7 +623,7 @@ export const useProjectStore = () => {
         return prev.map(p => {
             const newTasks = p.tasks.map(t => {
                 if (t.id === parentTaskId) {
-                    return { ...t, completed: true, completionDate: completionTimestamp };
+                    return { ...t, completed: true, completionDate: effectiveCompletionDate };
                 }
                 return t;
             });
@@ -636,7 +639,7 @@ export const useProjectStore = () => {
     if (uid) {
       const batch = writeBatch(db);
       batch.update(doc(db, 'users', uid, 'tasks', childTaskId), sanitizeForFirestore({ parentTaskId, projectId: null }));
-      batch.update(doc(db, 'users', uid, 'tasks', parentTaskId), sanitizeForFirestore({ completed: true, completionDate: completionTimestamp }));
+      batch.update(doc(db, 'users', uid, 'tasks', parentTaskId), sanitizeForFirestore({ completed: true, completionDate: effectiveCompletionDate }));
       batch.commit().catch(() => {});
     }
   };
