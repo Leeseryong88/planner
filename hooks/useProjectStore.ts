@@ -57,6 +57,7 @@ initialProjects.forEach(p => {
 export const useProjectStore = () => {
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const tasksRef = useRef<Task[]>(initialTasks);
   const [memos, setMemos] = useState<Memo[]>(initialMemos);
   const [prioritizedTaskIds, setPrioritizedTaskIds] = useState<string[]>([]);
   const [aiReports, setAIReports] = useState<AIReport[]>([]);
@@ -83,16 +84,14 @@ export const useProjectStore = () => {
               fileURL: data.fileURL,
               fileName: data.fileName,
               isCollapsed: data.isCollapsed ?? false,
-              tasks: [] // will be filled from tasks listener
+              tasks: []
             };
             return p;
-          });
-          // merge tasks after projects update
-          setProjects(prev => {
-            const projs = loaded;
-            // inject tasks based on current tasks state
-            return projs.map(p => ({ ...p, tasks: tasks.filter(t => t.projectId === p.id) }));
-          });
+          }).map(p => ({
+            ...p,
+            tasks: tasksRef.current.filter(t => t.projectId === p.id)
+          }));
+          setProjects(loaded);
         });
         // tasks
         const taskUnsub = onSnapshot(collection(db, 'users', user.uid, 'tasks'), (snap) => {
@@ -115,6 +114,7 @@ export const useProjectStore = () => {
             };
             return t;
           });
+          tasksRef.current = loaded;
           setTasks(loaded);
           // also inject into projects
           setProjects(prev => prev.map(p => ({ ...p, tasks: loaded.filter(t => t.projectId === p.id) })));
@@ -160,6 +160,10 @@ export const useProjectStore = () => {
     });
     return () => unsubAuth();
   }, []);
+
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
 
   const addProject = (projectData: Omit<Project, 'id' | 'status' | 'tasks' | 'position'>, position?: { x: number; y: number }) => {
     const newProject: Project = {
@@ -243,8 +247,13 @@ export const useProjectStore = () => {
         return allDescendants;
     };
 
-    // Get direct child tasks of the project
-    const directTaskIds = projectToMove.tasks.map(t => t.id);
+    // Get direct child tasks of the project from both project cache and master list
+    const directTaskIdSet = new Set<string>();
+    projectToMove.tasks.forEach(t => directTaskIdSet.add(t.id));
+    tasks
+      .filter(t => t.projectId === projectId)
+      .forEach(t => directTaskIdSet.add(t.id));
+    const directTaskIds = Array.from(directTaskIdSet);
     
     // Get all descendant tasks, including direct children
     const allTaskIdsToMove = getAllDescendantTaskIds(directTaskIds, tasks);
@@ -266,16 +275,7 @@ export const useProjectStore = () => {
       if (p.id === projectId) {
         // Move the project itself
         const newProjectPos = { x: p.position.x + delta.dx, y: p.position.y + delta.dy };
-        
-        // Update the tasks within this project object
-        const newTasksInProject = p.tasks.map(t => {
-          // These are direct children, which are in allTaskIdsToMove
-          return {
-            ...t,
-            position: { x: t.position.x + delta.dx, y: t.position.y + delta.dy },
-          };
-        });
-        
+        const newTasksInProject = updatedTasks.filter(t => t.projectId === projectId);
         return { ...p, position: newProjectPos, tasks: newTasksInProject };
       }
       return p;
