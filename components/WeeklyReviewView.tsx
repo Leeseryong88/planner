@@ -142,6 +142,10 @@ export const WeeklyReviewView: React.FC<{ store: ProjectStore }> = ({ store }) =
     const summaries: string[] = [];
     store.projects.forEach(project => {
       const tasks = buildTaskTreeForProject(project.id, store.tasks);
+      const projectStart = parseISODate(project.date);
+      const projectEnd = parseISODate(project.endDate);
+      const projectOverlaps = intersectsRange(projectStart, projectEnd, range.start, range.end);
+
       const filteredTasks = tasks.filter(task => {
         const datesToCheck = [
           parseISODate(task.date),
@@ -151,8 +155,10 @@ export const WeeklyReviewView: React.FC<{ store: ProjectStore }> = ({ store }) =
         return datesToCheck.some(date => date && isDateInRange(date, range.start, range.end));
       });
 
-      if (filteredTasks.length > 0) {
-        summaries.push(formatProjectSummary(project, filteredTasks));
+      if (projectOverlaps || filteredTasks.length > 0) {
+        const tasksToInclude = projectOverlaps ? (tasks.length > 0 ? tasks : []) : filteredTasks;
+        const summaryTasks = tasksToInclude.length > 0 ? tasksToInclude : filteredTasks;
+        summaries.push(formatProjectSummary(project, summaryTasks));
       }
     });
     return summaries;
