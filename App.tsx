@@ -3,13 +3,14 @@ import { Dashboard } from './components/Dashboard';
 import { CalendarView } from './components/CalendarView';
 import { ProjectsView } from './components/ProjectsView';
 import { NoteView } from './components/NoteView';
-import { CalendarIcon, DashboardIcon, LogoIcon, ProjectsIcon, EditIcon, PriorityIcon } from './components/icons';
+import { WeeklyReviewView } from './components/WeeklyReviewView';
+import { CalendarIcon, DashboardIcon, LogoIcon, ProjectsIcon, EditIcon, PriorityIcon, WeeklyIcon } from './components/icons';
 import { useProjectStore } from './hooks/useProjectStore';
 import { signOut } from 'firebase/auth';
 import { auth } from './firebase';
 import { useIsMobile } from './hooks/useIsMobile';
 
-type View = 'dashboard' | 'calendar' | 'projects' | 'priority' | 'memos';
+type View = 'dashboard' | 'calendar' | 'projects' | 'priority' | 'memos' | 'weekly';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -33,6 +34,8 @@ const App: React.FC = () => {
         return <ProjectsView store={projectStore} onProjectClick={handleNavigateToProject} fixedMode="tasks" />;
       case 'memos':
         return <NoteView store={projectStore} />;
+      case 'weekly':
+        return <WeeklyReviewView store={projectStore} />;
       case 'dashboard':
       default:
         return <Dashboard 
@@ -48,6 +51,7 @@ const App: React.FC = () => {
     { view: 'projects' as View, label: '목록', icon: <ProjectsIcon /> },
     { view: 'priority' as View, label: '우선순위', icon: <PriorityIcon /> },
     { view: 'memos' as View, label: 'NOTE', icon: <EditIcon /> },
+    { view: 'weekly' as View, label: '주간업무', icon: <WeeklyIcon /> },
     { view: 'calendar' as View, label: '캘린더', icon: <CalendarIcon /> },
   ]), []);
 

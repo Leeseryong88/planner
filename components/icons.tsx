@@ -91,6 +91,16 @@ export const PriorityIcon: React.FC<{ className?: string }> = ({ className }) =>
   </svg>
 );
 
+export const WeeklyIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg {...iconProps} className={className || iconProps.className}>
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M8 4v3" />
+    <path d="M16 4v3" />
+    <rect x="4" y="7" width="16" height="13" rx="2" />
+    <path d="M8 12h3l2 2l3 -4" />
+  </svg>
+);
+
 export const ChevronLeftIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg {...iconProps} className={className || iconProps.className}>
         <path stroke="none" d="M0 0h24v24H0z" fill="none" />

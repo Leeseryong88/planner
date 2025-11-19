@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Project, Task, ProjectStatus, Memo, AIReport } from '../types';
+import { Project, Task, ProjectStatus, Memo, WeeklyReport } from '../types';
 import { auth, db, storage } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
@@ -60,7 +60,7 @@ export const useProjectStore = () => {
   const tasksRef = useRef<Task[]>(initialTasks);
   const [memos, setMemos] = useState<Memo[]>(initialMemos);
   const [prioritizedTaskIds, setPrioritizedTaskIds] = useState<string[]>([]);
-  const [aiReports, setAIReports] = useState<AIReport[]>([]);
+  const [weeklyReports, setWeeklyReports] = useState<WeeklyReport[]>([]);
   const [uid, setUid] = useState<string | null>(null);
   const memoDebouncedTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -778,16 +778,20 @@ export const useProjectStore = () => {
     }
   };
 
-  const addAIReport = (reportData: Omit<AIReport, 'id'>) => {
-    const newReport: AIReport = {
+  const addWeeklyReport = (reportData: Omit<WeeklyReport, 'id'> & { id?: string }) => {
+    const newReport: WeeklyReport = {
       ...reportData,
-      id: `report-${Date.now()}`,
+      id: reportData.id ?? `weekly-${Date.now()}`,
     };
-    setAIReports(prev => [newReport, ...prev]);
+    setWeeklyReports(prev => [newReport, ...prev]);
   };
 
-  const deleteAIReport = (reportId: string) => {
-    setAIReports(prev => prev.filter(r => r.id !== reportId));
+  const updateWeeklyReport = (reportId: string, data: Partial<Omit<WeeklyReport, 'id'>>) => {
+    setWeeklyReports(prev => prev.map(report => report.id === reportId ? { ...report, ...data } : report));
+  };
+
+  const deleteWeeklyReport = (reportId: string) => {
+    setWeeklyReports(prev => prev.filter(report => report.id !== reportId));
   };
 
   // Cleanup debounced timers on unmount
@@ -915,7 +919,7 @@ export const useProjectStore = () => {
     projects,
     tasks,
     memos,
-    aiReports,
+    weeklyReports,
     prioritizedTaskIds,
     unlinkedTasks: tasks.filter(t => !t.projectId),
     addProject,
@@ -938,8 +942,9 @@ export const useProjectStore = () => {
     addMemo,
     updateMemo,
     deleteMemo,
-    addAIReport,
-    deleteAIReport,
+    addWeeklyReport,
+    updateWeeklyReport,
+    deleteWeeklyReport,
     setPrioritizedTasks,
     autoArrangeProjectTasks,
   };

@@ -49,12 +49,15 @@ export interface Memo {
   height?: number;
 }
 
-export interface AIReport {
+export interface WeeklyReport {
   id: string;
   title: string;
-  content: string;
-  prompt: string;
-  sourceProjectIds: string[];
-  sourceDate?: string; // YYYY-MM-DD 형식의 단일 날짜 또는 "YYYY-MM-DD to YYYY-MM-DD" 형식의 날짜 범위 문자열
+  periodStart: string;
+  periodEnd: string;
+  sections: {
+    done: string;
+    next: string;
+    issues: string;
+  };
   createdAt: string;
 }
