@@ -727,29 +727,14 @@ export const useProjectStore = () => {
     const childTask = tasks.find(t => t.id === childTaskId);
     if (!childTask || !childTask.parentTaskId) return;
 
-    let ancestorProjectId: string | null = null;
-    let parentId: string | null | undefined = childTask.parentTaskId;
-    while (parentId) {
-      const parentTask = tasks.find(t => t.id === parentId);
-      if (!parentTask) break;
-      if (parentTask.projectId) {
-        ancestorProjectId = parentTask.projectId;
-        break;
-      }
-      parentId = parentTask.parentTaskId ?? null;
-    }
-
-    const updatedChild = { ...childTask, parentTaskId: null, projectId: ancestorProjectId };
+    const updatedChild = { ...childTask, parentTaskId: null, projectId: null };
     setTasks(prev => prev.map(t => (t.id === childTaskId ? updatedChild : t)));
-    setProjects(prev => prev.map(p => {
-      const filtered = p.tasks.filter(t => t.id !== childTaskId);
-      if (ancestorProjectId && p.id === ancestorProjectId) {
-        return { ...p, tasks: [...filtered, updatedChild] };
-      }
-      return { ...p, tasks: filtered };
-    }));
+    setProjects(prev => prev.map(p => ({
+      ...p,
+      tasks: p.tasks.filter(t => t.id !== childTaskId),
+    })));
     if (uid) {
-      updateDoc(doc(db, 'users', uid, 'tasks', childTaskId), sanitizeForFirestore({ parentTaskId: null, projectId: ancestorProjectId })).catch(() => {});
+      updateDoc(doc(db, 'users', uid, 'tasks', childTaskId), sanitizeForFirestore({ parentTaskId: null, projectId: null })).catch(() => {});
     }
   };
 

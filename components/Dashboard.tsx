@@ -492,23 +492,33 @@ export const Dashboard: React.FC<{
 
       {creationMenuPos && (
         <div
-          className="absolute z-20 flex flex-row gap-3"
+          className="absolute z-20 flex flex-row gap-4 bg-secondary/90 backdrop-blur-sm rounded-2xl px-4 py-3 shadow-xl border border-border-color"
           style={{ left: creationMenuPos.clientX, top: creationMenuPos.clientY, transform: 'translate(-50%, -50%)' }}
         >
-          <button
-            onClick={handleCreateProject}
-            className="flex items-center justify-center w-12 h-12 rounded-full bg-secondary hover:bg-accent text-text-main hover:text-white transition-all shadow-lg shadow-accent/20"
-            title="프로젝트 만들기"
-          >
-            <ProjectsIcon className="w-6 h-6"/>
-          </button>
-          <button
-            onClick={handleCreateTask}
-            className="flex items-center justify-center w-12 h-12 rounded-full bg-secondary hover:bg-primary border border-border-color text-text-main transition-all shadow-lg"
-            title="새 작업"
-          >
-            <EditIcon className="w-6 h-6"/>
-          </button>
+          <div className="flex flex-col items-center gap-1 min-w-[64px]">
+            <button
+              onClick={handleCreateProject}
+              className="flex items-center justify-center w-12 h-12 rounded-full bg-secondary hover:bg-accent text-text-main hover:text-white transition-all shadow-lg shadow-accent/20"
+              title="프로젝트 만들기"
+            >
+              <ProjectsIcon className="w-6 h-6"/>
+            </button>
+            <span className="text-[10px] uppercase tracking-[0.2em] font-semibold text-text-secondary">
+              project
+            </span>
+          </div>
+          <div className="flex flex-col items-center gap-1 min-w-[64px]">
+            <button
+              onClick={handleCreateTask}
+              className="flex items-center justify-center w-12 h-12 rounded-full bg-secondary hover:bg-primary border border-border-color text-text-main transition-all shadow-lg"
+              title="새 작업"
+            >
+              <EditIcon className="w-6 h-6"/>
+            </button>
+            <span className="text-[10px] uppercase tracking-[0.2em] font-semibold text-text-secondary">
+              task
+            </span>
+          </div>
         </div>
       )}
 
@@ -654,11 +664,11 @@ export const Dashboard: React.FC<{
           {store.tasks.map(task => {
               const parentProject = findRootProject(task.id);
               const isProjectGroupDragging = !!parentProject && parentProject.id === draggedProjectId;
-              const isTaskGroupDragging = !!(draggedTaskGroup && draggedTaskGroup.affectedIds.includes(task.id));
-              const isGroupDragging = isProjectGroupDragging || isTaskGroupDragging;
-              const groupOffsetValue = isProjectGroupDragging
-                ? groupPreviewOffset
-                : (isTaskGroupDragging && draggedTaskGroup ? draggedTaskGroup.offset : undefined);
+              const isTaskGroupActive = !!(draggedTaskGroup && draggedTaskGroup.affectedIds.includes(task.id));
+              const isTaskGroupRoot = draggedTaskGroup?.rootId === task.id;
+              const taskGroupOffset = (isTaskGroupActive && draggedTaskGroup && !isTaskGroupRoot) ? draggedTaskGroup.offset : undefined;
+              const isGroupDragging = isProjectGroupDragging || isTaskGroupActive;
+              const groupOffsetValue = isProjectGroupDragging ? groupPreviewOffset : taskGroupOffset;
               const priorityIndex = filteredPrioritized.indexOf(task.id);
               const priority = priorityIndex > -1 ? priorityIndex + 1 : undefined;
 
