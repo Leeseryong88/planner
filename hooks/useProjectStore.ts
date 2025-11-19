@@ -298,6 +298,61 @@ export const useProjectStore = () => {
     }
   };
 
+  const moveTaskSubtree = (rootTaskId: string, delta: { dx: number; dy: number }) => {
+    if (delta.dx === 0 && delta.dy === 0) return;
+    const rootTask = tasks.find(t => t.id === rootTaskId);
+    if (!rootTask) return;
+
+    const getAllDescendantTaskIds = (startTaskIds: string[], allTasks: Task[]): Set<string> => {
+      const allDescendants = new Set<string>();
+      const queue = [...startTaskIds];
+      const visited = new Set<string>();
+
+      while (queue.length > 0) {
+        const currentTaskId = queue.shift()!;
+        if (visited.has(currentTaskId)) continue;
+
+        visited.add(currentTaskId);
+        allDescendants.add(currentTaskId);
+
+        const children = allTasks.filter(t => t.parentTaskId === currentTaskId);
+        for (const child of children) {
+          if (!visited.has(child.id)) {
+            queue.push(child.id);
+          }
+        }
+      }
+      return allDescendants;
+    };
+
+    const idsToMove = getAllDescendantTaskIds([rootTaskId], tasks);
+    if (idsToMove.size === 0) return;
+    const newPositions = new Map<string, { x: number; y: number }>();
+
+    const updatedTasks = tasks.map(t => {
+      if (idsToMove.has(t.id)) {
+        const newPos = { x: t.position.x + delta.dx, y: t.position.y + delta.dy };
+        newPositions.set(t.id, newPos);
+        return { ...t, position: newPos };
+      }
+      return t;
+    });
+    setTasks(updatedTasks);
+
+    setProjects(prev => prev.map(p => ({
+      ...p,
+      tasks: p.tasks.map(t => idsToMove.has(t.id) ? { ...t, position: newPositions.get(t.id)! } : t)
+    })));
+
+    if (uid) {
+      const batch = writeBatch(db);
+      newPositions.forEach((pos, id) => {
+        batch.update(doc(db, 'users', uid, 'tasks', id), sanitizeForFirestore({ position: pos }));
+      });
+      batch.commit().catch(() => {});
+    }
+  };
+
 
   const finishProject = (projectId: string) => {
     const projectToFinish = projects.find(p => p.id === projectId);
@@ -668,7 +723,37 @@ export const useProjectStore = () => {
     }
   };
 
-  const updateLineStyle = (projectId: string, taskId: string, lineStyle: Task['lineStyle']) => {
+  const unlinkTaskFromParent = (childTaskId: string) => {
+    const childTask = tasks.find(t => t.id === childTaskId);
+    if (!childTask || !childTask.parentTaskId) return;
+
+    let ancestorProjectId: string | null = null;
+    let parentId: string | null | undefined = childTask.parentTaskId;
+    while (parentId) {
+      const parentTask = tasks.find(t => t.id === parentId);
+      if (!parentTask) break;
+      if (parentTask.projectId) {
+        ancestorProjectId = parentTask.projectId;
+        break;
+      }
+      parentId = parentTask.parentTaskId ?? null;
+    }
+
+    const updatedChild = { ...childTask, parentTaskId: null, projectId: ancestorProjectId };
+    setTasks(prev => prev.map(t => (t.id === childTaskId ? updatedChild : t)));
+    setProjects(prev => prev.map(p => {
+      const filtered = p.tasks.filter(t => t.id !== childTaskId);
+      if (ancestorProjectId && p.id === ancestorProjectId) {
+        return { ...p, tasks: [...filtered, updatedChild] };
+      }
+      return { ...p, tasks: filtered };
+    }));
+    if (uid) {
+      updateDoc(doc(db, 'users', uid, 'tasks', childTaskId), sanitizeForFirestore({ parentTaskId: null, projectId: ancestorProjectId })).catch(() => {});
+    }
+  };
+
+  const updateLineStyle = (taskId: string, lineStyle: Task['lineStyle']) => {
     updateTask(taskId, { lineStyle });
   };
 
@@ -859,9 +944,11 @@ export const useProjectStore = () => {
     deleteTask,
     moveProjectGroup,
     updateTaskPosition,
+    moveTaskSubtree,
     linkTaskToProject,
     linkTaskToTask,
     unlinkTask,
+    unlinkTaskFromParent,
     updateLineStyle,
     addMemo,
     updateMemo,

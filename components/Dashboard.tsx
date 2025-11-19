@@ -9,6 +9,7 @@ import { Task, Project, ProjectStatus } from '../types';
 import { ProjectView } from './ProjectView';
 import { TaskView } from './TaskView';
 import { MiniMap } from './MiniMap';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -56,6 +57,10 @@ const LineStyleEditor: React.FC<{
 };
 
 type HoveredNode = { type: 'project' | 'task', data: Project | Task };
+type LineClickPayload =
+  | { kind: 'project-task'; projectId: string; taskId: string }
+  | { kind: 'task-task'; parentTaskId: string; childTaskId: string };
+type EditingLine = LineClickPayload & { pos: { x: number; y: number } };
 
 export const Dashboard: React.FC<{ 
   store: ProjectStore, 
@@ -77,7 +82,7 @@ export const Dashboard: React.FC<{
   const [mouseClientPos, setMouseClientPos] = useState({ x: 0, y: 0 });
   const [hoveredNode, setHoveredNode] = useState<HoveredNode | null>(null);
 
-  const [editingLine, setEditingLine] = useState<{ projectId: string; taskId: string; pos: {x: number; y: number} } | null>(null);
+  const [editingLine, setEditingLine] = useState<EditingLine | null>(null);
   
   const [viewingNode, setViewingNode] = useState<{ type: 'project' | 'task', id: string, pos: { x: number, y: number } } | null>(null);
   const [editingNode, setEditingNode] = useState<{ type: 'project' | 'task', id: string, pos: { x: number, y: number } } | null>(null);
@@ -85,8 +90,10 @@ export const Dashboard: React.FC<{
   const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
   const [creationMenuPos, setCreationMenuPos] = useState<{ canvasX: number; canvasY: number; clientX: number, clientY: number } | null>(null);
   const [groupPreviewOffset, setGroupPreviewOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [taskPreview, setTaskPreview] = useState<{ id: string | null; offset: { x: number; y: number } }>({ id: null, offset: { x: 0, y: 0 } });
+  const [draggedTaskGroup, setDraggedTaskGroup] = useState<{ rootId: string; affectedIds: string[]; offset: { x: number; y: number } } | null>(null);
   const pinchRef = useRef<{ distance: number; zoom: number; centerCanvas: { x: number; y: number }; centerClient: { x: number; y: number } } | null>(null);
+  const isMobile = useIsMobile();
+  const [showMobileNotice, setShowMobileNotice] = useState(false);
 
 
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -199,6 +206,22 @@ export const Dashboard: React.FC<{
       return !root || root?.status === ProjectStatus.InProgress;
     });
   }, [store.prioritizedTaskIds, tasksById, findRootProject]);
+
+  const getTaskSubtreeIds = useCallback((rootTaskId: string) => {
+    const result: string[] = [];
+    const stack = [rootTaskId];
+    const visited = new Set<string>();
+    while (stack.length > 0) {
+      const currentId = stack.pop()!;
+      if (visited.has(currentId)) continue;
+      visited.add(currentId);
+      result.push(currentId);
+      store.tasks
+        .filter(t => t.parentTaskId === currentId)
+        .forEach(child => stack.push(child.id));
+    }
+    return result;
+  }, [store.tasks]);
 
   const handleWheelCore = (clientX: number, clientY: number, deltaY: number) => {
     if (!canvasRef.current) return;
@@ -395,13 +418,12 @@ export const Dashboard: React.FC<{
   };
 
 
-  const handleLineClick = (e: ReactMouseEvent, projectId: string, taskId: string) => {
+  const handleLineClick = (e: ReactMouseEvent, payload: LineClickPayload) => {
     e.stopPropagation();
     const rect = canvasRef.current?.getBoundingClientRect();
     if (rect) {
       setEditingLine({
-        projectId,
-        taskId,
+        ...payload,
         pos: { x: e.clientX - rect.left, y: e.clientY - rect.top },
       });
     }
@@ -456,6 +478,17 @@ export const Dashboard: React.FC<{
             {hoveredNode.data.content && <p className="text-text-secondary mt-1">{hoveredNode.data.content}</p>}
         </div>
        )}
+
+      {isMobile && (
+        <div
+          className="absolute inset-0 z-30 cursor-not-allowed"
+          onClick={() => setShowMobileNotice(true)}
+        >
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-secondary/90 text-text-main text-sm font-semibold px-4 py-2 rounded-lg shadow pointer-events-none">
+            모바일에서는 캔버스를 사용할 수 없습니다. 탭하여 안내 보기
+          </div>
+        </div>
+      )}
 
       {creationMenuPos && (
         <div
@@ -522,9 +555,10 @@ export const Dashboard: React.FC<{
               return tasksForProject.map(task => {
                 // compute preview-aware positions
                 const pOffset = project.id === draggedProjectId ? groupPreviewOffset : { x: 0, y: 0 };
+                const isTaskGroupDragged = !!(draggedTaskGroup && draggedTaskGroup.affectedIds.includes(task.id));
                 const tOffset =
                   (draggedProjectId && project.id === draggedProjectId) ? groupPreviewOffset :
-                  (taskPreview.id === task.id ? taskPreview.offset : { x: 0, y: 0 });
+                  (isTaskGroupDragged && draggedTaskGroup ? draggedTaskGroup.offset : { x: 0, y: 0 });
                 const p1 = { x: project.position.x + pOffset.x, y: project.position.y + pOffset.y };
                 const p2 = { x: task.position.x + tOffset.x, y: task.position.y + tOffset.y };
                 const pathData = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
@@ -537,7 +571,7 @@ export const Dashboard: React.FC<{
                         strokeWidth="20"
                         fill="none"
                         style={{ pointerEvents: 'stroke' }}
-                        onClick={(e) => handleLineClick(e, project.id, task.id)}
+                        onClick={(e) => handleLineClick(e, { kind: 'project-task', projectId: project.id, taskId: task.id })}
                       />
                       <path
                         d={pathData}
@@ -563,12 +597,14 @@ export const Dashboard: React.FC<{
 
                 // preview-aware offsets
                 const rootId = rootProject?.id;
+                const parentInTaskGroup = !!(draggedTaskGroup && draggedTaskGroup.affectedIds.includes(parentTask.id));
+                const childInTaskGroup = !!(draggedTaskGroup && draggedTaskGroup.affectedIds.includes(task.id));
                 const pOffset =
                   (draggedProjectId && rootId === draggedProjectId) ? groupPreviewOffset :
-                  (taskPreview.id === parentTask.id ? taskPreview.offset : { x: 0, y: 0 });
+                  (parentInTaskGroup && draggedTaskGroup ? draggedTaskGroup.offset : { x: 0, y: 0 });
                 const cOffset =
                   (draggedProjectId && rootId === draggedProjectId) ? groupPreviewOffset :
-                  (taskPreview.id === task.id ? taskPreview.offset : { x: 0, y: 0 });
+                  (childInTaskGroup && draggedTaskGroup ? draggedTaskGroup.offset : { x: 0, y: 0 });
 
                 const p1 = { x: parentTask.position.x + pOffset.x, y: parentTask.position.y + pOffset.y };
                 const p2 = { x: task.position.x + cOffset.x, y: task.position.y + cOffset.y };
@@ -578,8 +614,16 @@ export const Dashboard: React.FC<{
                     <g key={`line-group-task-${parentTask.id}-${task.id}`}>
                         <path
                             d={pathData}
-                            stroke={'var(--color-border-color)'}
-                            strokeWidth={2}
+                            stroke="transparent"
+                            strokeWidth="20"
+                            fill="none"
+                            style={{ pointerEvents: 'stroke' }}
+                            onClick={(e) => handleLineClick(e, { kind: 'task-task', parentTaskId: parentTask.id, childTaskId: task.id })}
+                        />
+                        <path
+                            d={pathData}
+                            stroke={task.lineStyle?.color || 'var(--color-border-color)'}
+                            strokeWidth={task.lineStyle?.strokeWidth || 2}
                             fill="none"
                             style={{
                                 pointerEvents: 'none',
@@ -609,7 +653,12 @@ export const Dashboard: React.FC<{
           ))}
           {store.tasks.map(task => {
               const parentProject = findRootProject(task.id);
-              const isGroupDragging = !!parentProject && parentProject.id === draggedProjectId;
+              const isProjectGroupDragging = !!parentProject && parentProject.id === draggedProjectId;
+              const isTaskGroupDragging = !!(draggedTaskGroup && draggedTaskGroup.affectedIds.includes(task.id));
+              const isGroupDragging = isProjectGroupDragging || isTaskGroupDragging;
+              const groupOffsetValue = isProjectGroupDragging
+                ? groupPreviewOffset
+                : (isTaskGroupDragging && draggedTaskGroup ? draggedTaskGroup.offset : undefined);
               const priorityIndex = filteredPrioritized.indexOf(task.id);
               const priority = priorityIndex > -1 ? priorityIndex + 1 : undefined;
 
@@ -625,8 +674,18 @@ export const Dashboard: React.FC<{
                   onNodeClick={handleTaskClick} 
                   parentProject={parentProject}
                   isGroupDragging={isGroupDragging}
-                  groupOffset={isGroupDragging ? groupPreviewOffset : undefined}
-                  onTaskPreview={(id, off) => setTaskPreview({ id, offset: off })}
+                  groupOffset={groupOffsetValue}
+                  onGroupDragStart={(taskId) => {
+                    const affectedIds = getTaskSubtreeIds(taskId);
+                    setDraggedTaskGroup({ rootId: taskId, affectedIds, offset: { x: 0, y: 0 } });
+                  }}
+                  onGroupDragStop={() => setDraggedTaskGroup(null)}
+                  onGroupPreview={(taskId, off) => {
+                    setDraggedTaskGroup(prev => {
+                      if (!prev || prev.rootId !== taskId) return prev;
+                      return { ...prev, offset: off };
+                    });
+                  }}
                   priority={priority}
                 />
               )
@@ -634,18 +693,23 @@ export const Dashboard: React.FC<{
 
         </div>
         {editingLine && (() => {
-            const task = store.tasks.find(t => t.id === editingLine.taskId);
+            const editingTaskId = editingLine.kind === 'project-task' ? editingLine.taskId : editingLine.childTaskId;
+            const task = store.tasks.find(t => t.id === editingTaskId);
             return task ? (
               <LineStyleEditor
                 isOpen={!!editingLine}
                 onClose={() => setEditingLine(null)}
                 lineStyle={task.lineStyle}
                 onSave={(style) => {
-                  store.updateLineStyle(editingLine.projectId, editingLine.taskId, style);
+                  store.updateLineStyle(editingTaskId, style);
                   setEditingLine(null);
                 }}
                 onDelete={() => {
-                  store.unlinkTask(editingLine.projectId, editingLine.taskId);
+                  if (editingLine.kind === 'project-task') {
+                    store.unlinkTask(editingLine.projectId, editingTaskId);
+                  } else {
+                    store.unlinkTaskFromParent(editingLine.childTaskId);
+                  }
                   setEditingLine(null);
                 }}
                 position={editingLine.pos}
@@ -680,6 +744,16 @@ export const Dashboard: React.FC<{
             onSave={handleSaveNewTask}
             onClose={() => { setTaskModalOpen(false); setNewTaskPos(null); }}
         />
+      </Modal>
+
+      <Modal
+        isOpen={isMobile && showMobileNotice}
+        onClose={() => setShowMobileNotice(false)}
+        title="데스크탑 버전에서 이용해주세요"
+      >
+        <p className="text-text-secondary leading-relaxed">
+          모바일 기기에서는 캔버스 편집 기능을 지원하지 않습니다. 더 나은 사용 경험을 위해 데스크탑 환경에서 이용해 주세요.
+        </p>
       </Modal>
 
       {(() => {

@@ -179,12 +179,40 @@ export const TaskNode: React.FC<{
   isGroupDragging: boolean;
   priority?: number;
   groupOffset?: { x: number; y: number };
-  onTaskPreview?: (taskId: string, offset: { x: number; y: number }) => void;
-}> = ({ task, store, zoom, linkingTaskId, setLinkingTaskId, setHoveredNode, onNodeClick, parentProject, isGroupDragging, priority, groupOffset, onTaskPreview }) => {
+  onGroupDragStart?: (taskId: string) => void;
+  onGroupDragStop?: () => void;
+  onGroupPreview?: (taskId: string, offset: { x: number; y: number }) => void;
+}> = ({
+  task,
+  store,
+  zoom,
+  linkingTaskId,
+  setLinkingTaskId,
+  setHoveredNode,
+  onNodeClick,
+  parentProject,
+  isGroupDragging,
+  priority,
+  groupOffset,
+  onGroupDragStart,
+  onGroupDragStop,
+  onGroupPreview
+}) => {
 
     const handleDrag = (delta: { dx: number; dy: number }) => {
-        const newPos = { x: task.position.x + delta.dx, y: task.position.y + delta.dy };
-        store.updateTaskPosition(task.id, newPos);
+        store.moveTaskSubtree(task.id, delta);
+    };
+
+    const handleDragStart = () => {
+        onGroupDragStart?.(task.id);
+    };
+
+    const handleDragStop = () => {
+        onGroupDragStop?.();
+    };
+
+    const handleDragPreview = (offset: { x: number; y: number }) => {
+        onGroupPreview?.(task.id, offset);
     };
 
     const handleClick = (e: React.MouseEvent) => {
@@ -245,11 +273,12 @@ export const TaskNode: React.FC<{
         <DraggableNode
             position={displayPosition}
             onDrag={handleDrag}
-            onDragStop={() => {}}
+            onDragStart={handleDragStart}
+            onDragStop={handleDragStop}
             isGroupDragging={isGroupDragging}
             zoom={zoom}
             externalOffset={isGroupDragging ? (groupOffset || { x: 0, y: 0 }) : undefined}
-            onDragPreview={(off) => onTaskPreview?.(task.id, off)}
+            onDragPreview={handleDragPreview}
             className={nodeClassName}
             onClick={handleClick}
             onMouseEnter={() => setHoveredNode({type: 'task', data: task})}
