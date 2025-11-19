@@ -241,6 +241,9 @@ export const Dashboard: React.FC<{
         if (creationMenuPos) {
           setCreationMenuPos(null);
         }
+        if (editingLine) {
+          setEditingLine(null);
+        }
         setIsPanning(true);
         setStartPoint({ x: e.clientX - pan.x, y: e.clientY - pan.y });
         if(canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
@@ -294,6 +297,7 @@ export const Dashboard: React.FC<{
     pinchRef.current = null;
     if (e.target === e.currentTarget && e.touches.length === 1) {
       if (creationMenuPos) setCreationMenuPos(null);
+      if (editingLine) setEditingLine(null);
       setIsPanning(true);
       setStartPoint({ x: e.touches[0].clientX - pan.x, y: e.touches[0].clientY - pan.y });
     }
