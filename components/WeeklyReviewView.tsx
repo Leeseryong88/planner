@@ -138,31 +138,24 @@ export const WeeklyReviewView: React.FC<{ store: ProjectStore }> = ({ store }) =
     setIsLoading(false);
   };
 
-  const buildDataset = (doneRange: { start: Date; end: Date }, nextRange: { start: Date; end: Date }) => {
-    const doneSummaries: string[] = [];
-    const nextSummaries: string[] = [];
+  const buildDataset = (range: { start: Date; end: Date }) => {
+    const summaries: string[] = [];
     store.projects.forEach(project => {
       const tasks = buildTaskTreeForProject(project.id, store.tasks);
-      const filteredDoneTasks = tasks.filter(task => {
-        const completion = parseISODate(task.completionDate);
-        return completion && isDateInRange(completion, doneRange.start, doneRange.end);
+      const filteredTasks = tasks.filter(task => {
+        const datesToCheck = [
+          parseISODate(task.date),
+          parseISODate(task.endDate),
+          parseISODate(task.completionDate),
+        ];
+        return datesToCheck.some(date => date && isDateInRange(date, range.start, range.end));
       });
 
-      const filteredNextTasks = tasks.filter(task => {
-        const plannedStart = parseISODate(task.date);
-        const plannedEnd = parseISODate(task.endDate);
-        const hasOverlap = intersectsRange(plannedStart, plannedEnd, nextRange.start, nextRange.end);
-        return hasOverlap && !filteredDoneTasks.some(doneTask => doneTask.id === task.id);
-      });
-
-      if (filteredDoneTasks.length > 0) {
-        doneSummaries.push(formatProjectSummary(project, filteredDoneTasks));
-      }
-      if (filteredNextTasks.length > 0) {
-        nextSummaries.push(formatProjectSummary(project, filteredNextTasks));
+      if (filteredTasks.length > 0) {
+        summaries.push(formatProjectSummary(project, filteredTasks));
       }
     });
-    return { doneSummaries, nextSummaries };
+    return summaries;
   };
 
   const handleGenerate = async () => {
@@ -196,8 +189,8 @@ export const WeeklyReviewView: React.FC<{ store: ProjectStore }> = ({ store }) =
       };
     })();
 
-    const dataset = buildDataset(weekRanges.doneRange, weekRanges.nextRange);
-    if (dataset.doneSummaries.length === 0 && dataset.nextSummaries.length === 0) {
+    const dataset = buildDataset({ start, end });
+    if (dataset.length === 0) {
       setError('선택한 기간에 해당하는 데이터가 없습니다.');
       return;
     }
@@ -206,14 +199,10 @@ export const WeeklyReviewView: React.FC<{ store: ProjectStore }> = ({ store }) =
 당신은 한국어로 주간 업무 보고서를 작성하는 도우미입니다.
 기간: ${periodStart} ~ ${periodEnd}
 
-이번 주(월~일): ${weekRanges.doneRange.start.toISOString().slice(0, 10)} ~ ${weekRanges.doneRange.end.toISOString().slice(0, 10)}
-다음 주(월~일): ${weekRanges.nextRange.start.toISOString().slice(0, 10)} ~ ${weekRanges.nextRange.end.toISOString().slice(0, 10)}
+분석 기간(월~일): ${start.toISOString().slice(0, 10)} ~ ${end.toISOString().slice(0, 10)}
 
-이번 주 완료 데이터:
-${dataset.doneSummaries.join('\n\n---\n\n') || '없음'}
-
-다음 주 계획 데이터:
-${dataset.nextSummaries.join('\n\n---\n\n') || '없음'}
+아래는 기간 내 활동과 연관된 모든 프로젝트와 각 프로젝트에 속한 하위 작업 데이터입니다. 각 작업은 어떤 프로젝트에 속해 있는지, 예정/완료 정보가 있는지 여부에 상관없이 모두 포함되어 있습니다:
+${dataset.join('\n\n---\n\n')}
 
 다음 JSON 형식으로만 응답하세요(설명 금지, JSON 이외의 내용 금지):
 {
