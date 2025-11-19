@@ -69,22 +69,20 @@ const buildTaskTreeForProject = (projectId: string, allTasks: Task[]) => {
 
 const formatProjectSummary = (project: Project, tasks: Task[]) => {
   const taskLines = tasks.length > 0
-    ? tasks.map(task => {
+    ? tasks.map((task, index) => {
         const planned = `${task.date || '미정'} ~ ${task.endDate || '미정'}`;
         const completedAt = task.completed ? (task.completionDate || '완료 (날짜 미기록)') : '미완료';
-        return `- 작업: ${task.title}
-  내용: ${task.content || '없음'}
-  예정일: ${planned}
-  완료일: ${completedAt}`;
+        return `${index + 1}. ${task.title} — ${task.completed ? '완료' : '진행중'}
+내용: ${task.content || '없음'}
+예정일: ${planned}
+완료일: ${completedAt}`;
       }).join('\n')
-    : '- 하위 작업 없음';
+    : '1. 하위 작업 없음';
 
   return `
 ${project.title}
-설명: ${project.content || '없음'}
 상태: ${project.status === ProjectStatus.Completed ? '완료' : '진행 중'}
-예정: ${(project.date || '미정')} ~ ${(project.endDate || '미정')}
-하위 작업:
+기간: ${(project.date || '미정')} ~ ${(project.endDate || '미정')}
 ${taskLines}
 `.trim();
 };
@@ -140,22 +138,31 @@ export const WeeklyReviewView: React.FC<{ store: ProjectStore }> = ({ store }) =
     setIsLoading(false);
   };
 
-  const buildDataset = (start: Date, end: Date) => {
-    const summaries: string[] = [];
+  const buildDataset = (doneRange: { start: Date; end: Date }, nextRange: { start: Date; end: Date }) => {
+    const doneSummaries: string[] = [];
+    const nextSummaries: string[] = [];
     store.projects.forEach(project => {
       const tasks = buildTaskTreeForProject(project.id, store.tasks);
-      const projectStart = parseISODate(project.date);
-      const projectEnd = parseISODate(project.endDate);
-      const hasTaskInRange = tasks.some(task => {
-        const taskDates = [task.date, task.endDate, task.completionDate];
-        return taskDates.some(date => isDateInRange(parseISODate(date), start, end));
+      const filteredDoneTasks = tasks.filter(task => {
+        const completion = parseISODate(task.completionDate);
+        return completion && isDateInRange(completion, doneRange.start, doneRange.end);
       });
-      const isProjectInRange = intersectsRange(projectStart, projectEnd, start, end);
-      if (isProjectInRange || hasTaskInRange) {
-        summaries.push(formatProjectSummary(project, tasks));
+
+      const filteredNextTasks = tasks.filter(task => {
+        const plannedStart = parseISODate(task.date);
+        const plannedEnd = parseISODate(task.endDate);
+        const hasOverlap = intersectsRange(plannedStart, plannedEnd, nextRange.start, nextRange.end);
+        return hasOverlap && !filteredDoneTasks.some(doneTask => doneTask.id === task.id);
+      });
+
+      if (filteredDoneTasks.length > 0) {
+        doneSummaries.push(formatProjectSummary(project, filteredDoneTasks));
+      }
+      if (filteredNextTasks.length > 0) {
+        nextSummaries.push(formatProjectSummary(project, filteredNextTasks));
       }
     });
-    return summaries;
+    return { doneSummaries, nextSummaries };
   };
 
   const handleGenerate = async () => {
@@ -174,9 +181,24 @@ export const WeeklyReviewView: React.FC<{ store: ProjectStore }> = ({ store }) =
       return;
     }
 
-    const dataset = buildDataset(start, end);
-    if (dataset.length === 0) {
-      setError('선택한 기간에 해당하는 프로젝트가 없습니다.');
+    const weekRanges = (() => {
+      const firstMonday = new Date(start);
+      firstMonday.setDate(firstMonday.getDate() - ((firstMonday.getDay() + 6) % 7));
+      const secondMonday = new Date(firstMonday);
+      secondMonday.setDate(firstMonday.getDate() + 7);
+      const firstWeekEnd = new Date(firstMonday);
+      firstWeekEnd.setDate(firstMonday.getDate() + 6);
+      const secondWeekEnd = new Date(secondMonday);
+      secondWeekEnd.setDate(secondMonday.getDate() + 6);
+      return {
+        doneRange: { start: firstMonday, end: firstWeekEnd },
+        nextRange: { start: secondMonday, end: secondWeekEnd },
+      };
+    })();
+
+    const dataset = buildDataset(weekRanges.doneRange, weekRanges.nextRange);
+    if (dataset.doneSummaries.length === 0 && dataset.nextSummaries.length === 0) {
+      setError('선택한 기간에 해당하는 데이터가 없습니다.');
       return;
     }
 
@@ -184,8 +206,14 @@ export const WeeklyReviewView: React.FC<{ store: ProjectStore }> = ({ store }) =
 당신은 한국어로 주간 업무 보고서를 작성하는 도우미입니다.
 기간: ${periodStart} ~ ${periodEnd}
 
-아래 데이터를 참고해서 보고서를 작성하세요.
-${dataset.join('\n\n---\n\n')}
+이번 주(월~일): ${weekRanges.doneRange.start.toISOString().slice(0, 10)} ~ ${weekRanges.doneRange.end.toISOString().slice(0, 10)}
+다음 주(월~일): ${weekRanges.nextRange.start.toISOString().slice(0, 10)} ~ ${weekRanges.nextRange.end.toISOString().slice(0, 10)}
+
+이번 주 완료 데이터:
+${dataset.doneSummaries.join('\n\n---\n\n') || '없음'}
+
+다음 주 계획 데이터:
+${dataset.nextSummaries.join('\n\n---\n\n') || '없음'}
 
 다음 JSON 형식으로만 응답하세요(설명 금지, JSON 이외의 내용 금지):
 {
