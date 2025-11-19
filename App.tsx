@@ -3,7 +3,7 @@ import { Dashboard } from './components/Dashboard';
 import { CalendarView } from './components/CalendarView';
 import { ProjectsView } from './components/ProjectsView';
 import { NoteView } from './components/NoteView';
-import { CalendarIcon, DashboardIcon, LogoIcon, ProjectsIcon, EditIcon } from './components/icons';
+import { CalendarIcon, DashboardIcon, LogoIcon, ProjectsIcon, EditIcon, PriorityIcon } from './components/icons';
 import { useProjectStore } from './hooks/useProjectStore';
 import { signOut } from 'firebase/auth';
 import { auth } from './firebase';
@@ -46,7 +46,7 @@ const App: React.FC = () => {
   const navConfig = useMemo(() => ([
     { view: 'dashboard' as View, label: '캔버스', icon: <DashboardIcon /> },
     { view: 'projects' as View, label: '목록', icon: <ProjectsIcon /> },
-    { view: 'priority' as View, label: '우선순위', icon: <ProjectsIcon /> },
+    { view: 'priority' as View, label: '우선순위', icon: <PriorityIcon /> },
     { view: 'memos' as View, label: 'NOTE', icon: <EditIcon /> },
     { view: 'calendar' as View, label: '캘린더', icon: <CalendarIcon /> },
   ]), []);

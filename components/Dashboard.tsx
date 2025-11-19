@@ -514,7 +514,7 @@ export const Dashboard: React.FC<{
           <div className="flex flex-col items-center gap-1 min-w-[64px]">
             <button
               onClick={handleCreateTask}
-              className="flex items-center justify-center w-12 h-12 rounded-full bg-secondary hover:bg-primary border border-border-color text-text-main transition-all shadow-lg"
+              className="flex items-center justify-center w-12 h-12 rounded-full bg-secondary hover:bg-accent border border-border-color text-text-main hover:text-white transition-all shadow-lg shadow-accent/20"
               title="새 작업"
             >
               <EditIcon className="w-6 h-6"/>
