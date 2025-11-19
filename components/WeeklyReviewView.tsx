@@ -1,5 +1,4 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { GoogleGenAI } from '@google/genai';
 import { ProjectStore } from '../hooks/useProjectStore';
 import { Project, Task, ProjectStatus } from '../types';
 import { DatePicker } from './DatePicker';
@@ -103,6 +102,11 @@ const extractJson = (raw: string) => {
     }
   }
   throw new Error('AI 응답을 파싱할 수 없습니다.');
+};
+
+const getGoogleClient = async (apiKey: string) => {
+  const { GoogleGenAI } = await import('@google/genai');
+  return new GoogleGenAI({ apiKey });
 };
 
 export const WeeklyReviewView: React.FC<{ store: ProjectStore }> = ({ store }) => {
@@ -226,7 +230,11 @@ ${dataset.join('\n\n---\n\n')}
     setIsLoading(true);
     setError(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+      const apiKey = import.meta.env.VITE_GOOGLE_GENAI_KEY as string | undefined;
+      if (!apiKey) {
+        throw new Error('VITE_GOOGLE_GENAI_KEY가 설정되어 있지 않습니다.');
+      }
+      const ai = await getGoogleClient(apiKey);
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
