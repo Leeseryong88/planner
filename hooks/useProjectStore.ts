@@ -135,6 +135,25 @@ export const useProjectStore = () => {
           });
           setMemos(loaded);
         });
+        const weeklyReportUnsub = onSnapshot(collection(db, 'users', user.uid, 'weeklyReports'), (snap) => {
+          const loaded = snap.docs.map(d => {
+            const data: any = d.data();
+            const report: WeeklyReport = {
+              id: d.id,
+              title: data.title ?? '보고서',
+              periodStart: data.periodStart ?? '',
+              periodEnd: data.periodEnd ?? '',
+              sections: {
+                done: data.sections?.done ?? '',
+                next: data.sections?.next ?? '',
+                issues: data.sections?.issues ?? '',
+              },
+              createdAt: data.createdAt ?? new Date().toISOString(),
+            };
+            return report;
+          });
+          setWeeklyReports(loaded);
+        });
         // state (prioritizedTaskIds)
         const stateUnsub = onSnapshot(doc(db, 'users', user.uid, 'state', 'app'), (snap) => {
           const data: any = snap.data();
@@ -148,6 +167,7 @@ export const useProjectStore = () => {
           projUnsub();
           taskUnsub();
           memoUnsub();
+          weeklyReportUnsub();
           stateUnsub();
         };
       } else {
@@ -156,6 +176,7 @@ export const useProjectStore = () => {
         setTasks(initialTasks);
         setMemos(initialMemos);
         setPrioritizedTaskIds([]);
+        setWeeklyReports([]);
       }
     });
     return () => unsubAuth();
@@ -784,14 +805,23 @@ export const useProjectStore = () => {
       id: reportData.id ?? `weekly-${Date.now()}`,
     };
     setWeeklyReports(prev => [newReport, ...prev]);
+    if (uid) {
+      setDoc(doc(db, 'users', uid, 'weeklyReports', newReport.id), sanitizeForFirestore(newReport as any)).catch(() => {});
+    }
   };
 
   const updateWeeklyReport = (reportId: string, data: Partial<Omit<WeeklyReport, 'id'>>) => {
     setWeeklyReports(prev => prev.map(report => report.id === reportId ? { ...report, ...data } : report));
+    if (uid) {
+      updateDoc(doc(db, 'users', uid, 'weeklyReports', reportId), sanitizeForFirestore(data as any)).catch(() => {});
+    }
   };
 
   const deleteWeeklyReport = (reportId: string) => {
     setWeeklyReports(prev => prev.filter(report => report.id !== reportId));
+    if (uid) {
+      deleteDoc(doc(db, 'users', uid, 'weeklyReports', reportId)).catch(() => {});
+    }
   };
 
   // Cleanup debounced timers on unmount
