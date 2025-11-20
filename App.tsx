@@ -1,14 +1,15 @@
-import React, { useMemo, useState } from 'react';
-import { Dashboard } from './components/Dashboard';
-import { CalendarView } from './components/CalendarView';
-import { ProjectsView } from './components/ProjectsView';
-import { NoteView } from './components/NoteView';
-import { WeeklyReviewView } from './components/WeeklyReviewView';
+import React, { Suspense, useMemo, useState } from 'react';
 import { CalendarIcon, DashboardIcon, LogoIcon, ProjectsIcon, EditIcon, PriorityIcon, WeeklyIcon } from './components/icons';
 import { useProjectStore } from './hooks/useProjectStore';
 import { signOut } from 'firebase/auth';
 import { auth } from './firebase';
 import { useIsMobile } from './hooks/useIsMobile';
+
+const DashboardView = React.lazy(() => import('./components/Dashboard').then(mod => ({ default: mod.Dashboard })));
+const CalendarView = React.lazy(() => import('./components/CalendarView').then(mod => ({ default: mod.CalendarView })));
+const ProjectsViewLazy = React.lazy(() => import('./components/ProjectsView').then(mod => ({ default: mod.ProjectsView })));
+const NoteView = React.lazy(() => import('./components/NoteView').then(mod => ({ default: mod.NoteView })));
+const WeeklyReviewView = React.lazy(() => import('./components/WeeklyReviewView').then(mod => ({ default: mod.WeeklyReviewView })));
 
 type View = 'dashboard' | 'calendar' | 'projects' | 'priority' | 'memos' | 'weekly';
 
@@ -28,21 +29,22 @@ const App: React.FC = () => {
       case 'calendar':
         return <CalendarView store={projectStore} />;
       case 'projects':
-        return <ProjectsView store={projectStore} onProjectClick={handleNavigateToProject} fixedMode="projects" />;
+        return <ProjectsViewLazy store={projectStore} onProjectClick={handleNavigateToProject} fixedMode="projects" />;
       case 'priority':
-        // 같은 화면이지만 상단 탭만 다른 이름으로 접근
-        return <ProjectsView store={projectStore} onProjectClick={handleNavigateToProject} fixedMode="tasks" />;
+        return <ProjectsViewLazy store={projectStore} onProjectClick={handleNavigateToProject} fixedMode="tasks" />;
       case 'memos':
         return <NoteView store={projectStore} />;
       case 'weekly':
         return <WeeklyReviewView store={projectStore} />;
       case 'dashboard':
       default:
-        return <Dashboard 
-                  store={projectStore} 
-                  focusProjectId={focusProjectId} 
-                  onFocusHandled={() => setFocusProjectId(null)}
-               />;
+        return (
+          <DashboardView
+            store={projectStore}
+            focusProjectId={focusProjectId}
+            onFocusHandled={() => setFocusProjectId(null)}
+          />
+        );
     }
   };
 
@@ -105,7 +107,9 @@ const App: React.FC = () => {
         </div>
       </header>
       <main className="p-3 md:p-8">
-        {renderView()}
+        <Suspense fallback={<div className="flex justify-center items-center h-[calc(100vh-200px)] text-text-secondary">로딩 중...</div>}>
+          {renderView()}
+        </Suspense>
       </main>
       {isMobile && (
         <nav className="fixed bottom-0 left-0 right-0 bg-secondary/80 backdrop-blur-md border-t border-border-color/70 z-50">
