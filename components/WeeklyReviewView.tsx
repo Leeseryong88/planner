@@ -230,9 +230,13 @@ ${dataset.join('\n\n---\n\n')}
     setIsLoading(true);
     setError(null);
     try {
-      const apiKey = import.meta.env.VITE_GOOGLE_GENAI_KEY as string | undefined;
+      const apiKey =
+        (process.env.GEMINI_API_KEY as string | undefined) ||
+        (process.env.API_KEY as string | undefined) ||
+        (import.meta.env.VITE_GEMINI_API_KEY as string | undefined) ||
+        (import.meta.env.VITE_GOOGLE_GENAI_KEY as string | undefined);
       if (!apiKey) {
-        throw new Error('VITE_GOOGLE_GENAI_KEY가 설정되어 있지 않습니다.');
+        throw new Error('Gemini API 키(GEMINI_API_KEY/VITE_GEMINI_API_KEY)가 설정되어 있지 않습니다.');
       }
       const ai = await getGoogleClient(apiKey);
       const response = await ai.models.generateContent({
